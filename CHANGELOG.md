@@ -4,6 +4,62 @@ Notable changes to polyvm. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and polyvm uses
 [semantic versioning](https://semver.org/).
 
+## [0.1.1] - 2026-09-01
+
+### Added
+
+- **Prerequisite checks before installing.** A new optional `bin/preflight`
+  plugin hook runs before anything is downloaded, so a machine that cannot
+  build a language says so up front instead of failing at `configure` after a
+  25 MB download.
+- The Python plugin implements it. It probes for a C compiler and each
+  development header by compiling against them, rather than guessing at
+  include paths, which differ across Debian multiarch, musl, macOS SDKs and
+  Homebrew prefixes. It then prints a single copy-paste command with the right
+  package names for apt, dnf, yum, apk, pacman, zypper or brew. A missing
+  compiler, `zlib`, `openssl` or `libffi` stops the install; missing optional
+  headers warn and name the standard library module that would be lost.
+- `polyvm doctor <plugin>` runs that check on its own, without downloading
+  anything.
+- `POLYVM_SKIP_PREFLIGHT=1` to install anyway.
+- `polyvm plugin available [query]` lists every language you can add, built-in
+  and from the index, marking the ones already installed.
+- `POLYVM_PLUGIN_INDEX_DIR` is honoured, so a mirrored or offline clone of the
+  plugin index can be used instead of reaching GitHub.
+
+### Changed
+
+- `polyvm list-all` lays versions out in columns and follows them with a count
+  and the command to install one, instead of printing 1,090 bare lines. Piped
+  output is unchanged: one version per line, no decoration on either stream.
+- `polyvm plugin add` now says what to run next, because adding a plugin
+  installs nothing by itself.
+- `polyvm plugin search` is an alias for `polyvm plugin available`.
+
+### Fixed
+
+- **`curl … | bash` aborted immediately** with `BASH_SOURCE[0]: unbound
+  variable`. The documented one-line install never worked; only running
+  `install.sh` as a file did, which is the one form the tests used.
+- `install.sh` and `polyvm doctor` required `curl` specifically, refusing to
+  install on a minimal image that ships only `wget`, which polyvm handles fine
+  everywhere else.
+- `POLYVM_PLUGIN_INDEX_DIR` was overwritten during path setup and could not be
+  overridden.
+- The `macos-13` CI runner has been retired and that job queued forever. The
+  matrix moved to `macos-14` and every job now has a timeout.
+- `.gitignore` used unanchored patterns. `plugins/` matches at any depth, so it
+  also excluded `contrib/plugins` and kept the built-in Python plugin out of
+  the repository entirely. All runtime-data patterns are now anchored to the
+  repository root, and CI fails if any source file is ignored or if a file the
+  build references is untracked.
+
+### Notes
+
+- The test suite now points at a local plugin-index fixture and asserts that no
+  command clones anything, so it is genuinely offline and runs in about two
+  seconds. 91 assertions, verified under busybox with `wget` and no `curl`.
+
 ## [0.1.0] - 2026-09-01
 
 First release.
@@ -67,4 +123,5 @@ First release.
 - Windows is not supported yet. The platform seams are in place and the plan is
   in [docs/windows.md](docs/windows.md). WSL works today.
 
+[0.1.1]: https://github.com/dev-sriramp/polyvm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dev-sriramp/polyvm/releases/tag/v0.1.0
