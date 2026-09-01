@@ -72,8 +72,73 @@ manager you actually have.
 
 A missing compiler or a missing `zlib`, `openssl` or `libffi` header stops the
 install before a single byte is downloaded. Missing optional headers only warn,
-and name the module you will lose. Override with `POLYVM_SKIP_PREFLIGHT=1` if
-you know better.
+and name the module you will lose.
+
+**It offers to fix it rather than just complaining.** When it can, it prints
+the exact command and asks:
+
+```
+Python is compiled from source, and this machine is missing things it needs:
+
+    build-essential
+        a C compiler, without which nothing can be compiled
+
+  polyvm can install them with:
+
+    sudo apt-get update && sudo apt-get install -y build-essential
+
+  Install them now? [Y/n]
+```
+
+Say yes and it installs them, re-checks, and carries on with the build. Say no
+and it stops, having downloaded nothing.
+
+It only asks when there is a terminal to answer, and only when it can actually
+install: as root, or with `sudo` available. Otherwise it reports the command and
+tells you to run it yourself. It never installs anything without being asked
+or told.
+
+On macOS the same thing happens, with the right tools for the platform. The
+compiler comes from the command line tools, so polyvm offers to run
+`xcode-select --install`. The libraries come from Homebrew, so it checks which
+formulas are actually installed rather than probing include paths, which never
+contain Homebrew headers, and offers:
+
+```
+Python needs these Homebrew formulas and they are not installed:
+
+    openssl@3
+        no ssl module, so pip cannot reach the network
+    tcl-tk
+        no tkinter, so IDLE and turtle will not run
+
+  polyvm can install them with:
+
+    brew install openssl@3 tcl-tk
+
+  Install them now? [Y/n]
+```
+
+This is the step people miss most often with pyenv, and the reason a
+Mac-built Python so often has no `ssl` or `readline`.
+
+| `POLYVM_INSTALL_DEPS` | Effect |
+|---|---|
+| unset or `ask` | Prompt when a terminal is present, report otherwise |
+| `yes` | Install without asking. For Dockerfiles and CI |
+| `no` | Never install, just report |
+
+`POLYVM_SKIP_PREFLIGHT=1` skips the whole check.
+
+The version is validated too, so you never install a toolchain for a version
+that does not exist:
+
+```
+$ polyvm install python 3.17
+error: there is no Python 3.17.
+  See everything:  polyvm list-all python
+  Newest stable:   polyvm install python latest
+```
 
 **macOS**
 

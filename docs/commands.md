@@ -203,4 +203,5 @@ Print the shell integration snippet, for adding to an rc file by hand.
 | `POLYVM_UPDATE_CHECK` | `never` to disable the update notice |
 | `POLYVM_UPDATE_INTERVAL_HOURS` | How often to re-check for a release. Default 24 |
 | `POLYVM_SKIP_PREFLIGHT` | Skip a plugin's prerequisite check and install anyway |
+| `POLYVM_INSTALL_DEPS` | `yes` to install missing build dependencies without asking, `no` to never install them. Default is to ask when a terminal is present |
 | `POLYVM_PLUGIN_INDEX_DIR` | Use a local or mirrored clone of the plugin index |

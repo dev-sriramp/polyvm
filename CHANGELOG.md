@@ -4,6 +4,38 @@ Notable changes to polyvm. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and polyvm uses
 [semantic versioning](https://semver.org/).
 
+## [0.1.2] - 2026-09-01
+
+### Added
+
+- **polyvm offers to install missing build dependencies instead of only
+  reporting them.** When a language cannot be built, the prerequisite check now
+  prints the exact command and asks whether to run it. Say yes and it installs,
+  re-checks and carries on with the build.
+- `POLYVM_INSTALL_DEPS` controls that: `yes` installs without asking, for
+  Dockerfiles and CI; `no` never installs; unset asks when a terminal is
+  present.
+- The requested version is validated before any of this, so you never install a
+  toolchain for a version that does not exist. `polyvm install python 3.17` now
+  says there is no such version and points at `polyvm list-all python`.
+- macOS gets the same treatment with the right tools: polyvm offers to run
+  `xcode-select --install` for the compiler, and `brew install` for the
+  libraries. It checks which Homebrew formulas are installed rather than
+  probing include paths, since a Homebrew header is never on the default
+  include path, so the old check reported every library as missing.
+
+### Changed
+
+- The prerequisite check no longer prints the same install command twice.
+
+### Notes
+
+- polyvm never installs system packages without being asked or told. It only
+  prompts when a terminal is there to answer and when it can actually install,
+  meaning as root or with `sudo` available. Where it cannot, it reports the
+  command for someone else to run. It will not prompt in CI, where a hung build
+  waiting for input would be worse than a clear failure.
+
 ## [0.1.1] - 2026-09-01
 
 ### Added
@@ -123,5 +155,6 @@ First release.
 - Windows is not supported yet. The platform seams are in place and the plan is
   in [docs/windows.md](docs/windows.md). WSL works today.
 
+[0.1.2]: https://github.com/dev-sriramp/polyvm/releases/tag/v0.1.2
 [0.1.1]: https://github.com/dev-sriramp/polyvm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/dev-sriramp/polyvm/releases/tag/v0.1.0

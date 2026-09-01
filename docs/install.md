@@ -72,8 +72,15 @@ polyvm plugin add python
 polyvm doctor python
 ```
 
-That prints the exact package command for the image you are in, and stops the
-install before anything is fetched if the toolchain is missing.
+That prints the exact package command for the image you are in, offers to run
+it, and stops before anything is fetched if you decline.
+
+In a Dockerfile there is nobody to answer, so say yes up front:
+
+```dockerfile
+ENV POLYVM_INSTALL_DEPS=yes
+RUN polyvm plugin add python && polyvm install python 3.13.1
+```
 
 In a Dockerfile, put the integration in the image environment rather than
 sourcing it per layer:

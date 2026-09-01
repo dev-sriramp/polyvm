@@ -11,6 +11,9 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/polyvm-test.XXXXXX")"
 export POLYVM_DIR="$REPO"
 export POLYVM_DATA_DIR="${WORK}/data"
 export POLYVM_YES=1
+# No test may ever open an interactive prompt: `make test` from a terminal
+# would hang waiting for an answer nobody expects to give.
+export POLYVM_INSTALL_DEPS=no
 export NO_COLOR=1
 POLYVM="${REPO}/bin/polyvm"
 
@@ -405,6 +408,76 @@ case "$PIPE_STDIN" in
   *"unbound variable"*) fail "install.sh survives curl | bash" "$PIPE_STDIN" ;;
   *) pass "install.sh survives curl | bash" ;;
 esac
+
+printf '\npython dependency install\n'
+PYDEPS="${REPO}/contrib/plugins/python/lib"
+pydeps() {
+  bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; $1" < /dev/null
+}
+assert_eq "the apt install command is right" "apt-get install -y" "$(pydeps 'pkg_install_command apt')"
+assert_eq "the apk install command is right" "apk add --no-cache" "$(pydeps 'pkg_install_command apk')"
+assert_eq "only apt needs a refresh step" "" "$(pydeps 'pkg_update_command dnf')"
+assert_eq "the full command joins refresh and install" \
+  "sudo apt-get update && sudo apt-get install -y libssl-dev" \
+  "$(pydeps 'full_install_command apt "sudo " " libssl-dev"')"
+assert_eq "a package manager with no install command is refused" "" \
+  "$(pydeps 'full_install_command unknown "" " x" || true')"
+assert_fails "POLYVM_INSTALL_DEPS=no never installs" \
+  bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; POLYVM_INSTALL_DEPS=no confirm_install x < /dev/null"
+assert_ok "POLYVM_INSTALL_DEPS=yes installs without asking" \
+  bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; POLYVM_INSTALL_DEPS=yes confirm_install x < /dev/null"
+# shellcheck disable=SC2016  # the variable is expanded inside pydeps, not here
+assert_contains "every required header names the package and the cost" \
+  "$(pydeps 'printf "%s" "$POLYVM_PY_REQUIRED_HEADERS"')" "pip cannot reach the network"
+
+# macOS takes a different path: Homebrew formulas rather than header probes,
+# because a Homebrew header is never on the default include path.
+MACSTUB="${WORK}/macstub"
+mkdir -p "$MACSTUB" "${WORK}/brew/readline"
+cat > "${MACSTUB}/uname" <<'HOOK'
+#!/usr/bin/env bash
+case "${1:-}" in
+  -s) echo Darwin ;;
+  -m) echo arm64 ;;
+  *) echo Darwin ;;
+esac
+HOOK
+cat > "${MACSTUB}/xcode-select" <<'HOOK'
+#!/usr/bin/env bash
+[ "${FAKE_NO_CLT:-}" = "1" ] && exit 2
+[ "${1:-}" = "-p" ] && echo /Library/Developer/CommandLineTools
+exit 0
+HOOK
+cat > "${MACSTUB}/brew" <<HOOK
+#!/usr/bin/env bash
+case "\${1:-}" in
+  --prefix) d="${WORK}/brew/\$2"; [ -d "\$d" ] && { echo "\$d"; exit 0; }; exit 1 ;;
+  install) shift; echo "\$*" >> "${WORK}/brew-install.log" ;;
+esac
+HOOK
+# Stub the compiler too, so the macOS checks behave the same whether or not
+# the machine running the tests happens to have one.
+cat > "${MACSTUB}/cc" <<'HOOK'
+#!/usr/bin/env bash
+exit 0
+HOOK
+chmod +x "${MACSTUB}"/*
+
+assert_eq "an installed formula is detected" "yes" \
+  "$(PATH="${MACSTUB}:$PATH" bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; brew_formula_installed readline && echo yes || echo no" < /dev/null)"
+assert_eq "a missing formula is detected" "no" \
+  "$(PATH="${MACSTUB}:$PATH" bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; brew_formula_installed openssl@3 && echo yes || echo no" < /dev/null)"
+assert_eq "macOS is detected through uname" "darwin" \
+  "$(PATH="${MACSTUB}:$PATH" bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; plugin_os" < /dev/null)"
+MAC_OUT="$(PATH="${MACSTUB}:$PATH" POLYVM_INSTALL_DEPS=no bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; python_preflight" < /dev/null 2>&1 || true)"
+assert_contains "macOS names the missing formula" "$MAC_OUT" "openssl@3"
+assert_contains "macOS offers a brew command" "$MAC_OUT" "brew install"
+case "$MAC_OUT" in
+  *"zlib1g-dev"*|*"apt-get"*) fail "macOS does not suggest Linux packages" "$MAC_OUT" ;;
+  *) pass "macOS does not suggest Linux packages" ;;
+esac
+MAC_NOCLT="$(PATH="${MACSTUB}:$PATH" FAKE_NO_CLT=1 POLYVM_INSTALL_DEPS=no bash -c ". '${PYDEPS}/helpers.sh' >/dev/null 2>&1; . '${PYDEPS}/deps.sh'; python_preflight" < /dev/null 2>&1 || true)"
+assert_contains "macOS without the command line tools says so" "$MAC_NOCLT" "xcode-select --install"
 
 printf '\noffline guarantee\n'
 # The suite must never reach the network. If it does, it is slow, it fails on a
