@@ -1,0 +1,90 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: verify and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag and the VERSION file must agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          file="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$file" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match VERSION file (${file})" >&2
+            echo "bump VERSION and retag, or use ./scripts/release.sh" >&2
+            exit 1
+          fi
+          echo "releasing ${file}"
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - name: Full check
+        run: make check
+
+  smoke:
+    name: install from the tag
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Install exactly the way a user would
+        run: |
+          POLYVM_DIR="$HOME/.polyvm" \
+          POLYVM_REF="${GITHUB_REF_NAME}" \
+          POLYVM_NO_RC=1 \
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/install.sh)"
+      - name: It runs and reports the released version
+        run: |
+          export POLYVM_DIR="$HOME/.polyvm"
+          . "$POLYVM_DIR/polyvm.sh"
+          polyvm version
+          polyvm doctor
+          test "$(polyvm version | awk '{print $2}')" = "${GITHUB_REF_NAME#v}"
+
+  publish:
+    name: publish the release
+    needs: [verify, smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build the release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          previous="$(git tag --sort=-v:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n1 || true)"
+          {
+            echo "## Install"
+            echo
+            echo '```sh'
+            echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash"
+            echo '```'
+            echo
+            echo "Already have polyvm? Run \`polyvm update\`."
+            echo
+            echo "## Changes"
+            echo
+            if [ -n "$previous" ]; then
+              git log --pretty='- %s' "${previous}..${GITHUB_REF_NAME}"
+            else
+              git log --pretty='- %s'
+            fi
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "polyvm ${GITHUB_REF_NAME#v}" \
+            --notes-file RELEASE_NOTES.md

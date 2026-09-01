@@ -1,0 +1,147 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - name: Syntax
+        run: make syntax
+      - name: Lint
+        run: make lint
+
+  test:
+    name: test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04, macos-latest, macos-13]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the shell we are testing against
+        run: bash --version | head -1
+      - name: Test
+        run: make test
+
+  bash32:
+    name: stock macOS bash 3.2
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm /bin/bash is 3.2
+        run: /bin/bash --version | head -1
+      - name: Run the suite under /bin/bash
+        run: /bin/bash ./test/run.sh
+
+  distros:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:24.04
+          - ubuntu:22.04
+          - debian:12
+          - fedora:41
+          - alpine:3.20
+    steps:
+      - name: Install polyvm's stated dependencies only
+        shell: sh
+        run: |
+          if command -v apt-get >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq && apt-get install -y -qq bash git curl ca-certificates tar
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y -q bash git curl tar
+          elif command -v apk >/dev/null 2>&1; then
+            apk add --no-cache bash git curl tar
+          fi
+      - uses: actions/checkout@v4
+      - name: Test
+        shell: bash
+        run: ./test/run.sh
+
+  integration:
+    name: install a real runtime
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install polyvm into a scratch prefix
+        run: POLYVM_DIR="$HOME/polyvm-ci" POLYVM_NO_RC=1 ./install.sh
+      - name: Add a plugin and install a version
+        run: |
+          export POLYVM_DIR="$HOME/polyvm-ci"
+          . "$POLYVM_DIR/polyvm.sh"
+          polyvm doctor
+          polyvm plugin add nodejs
+          polyvm install nodejs 22.14.0
+          polyvm global nodejs 22.14.0
+          node --version
+          npm --version
+        env:
+          NODEJS_CHECK_SIGNATURES: "no"
+      - name: The shim must work with no shell integration at all
+        run: |
+          env -i PATH="$HOME/polyvm-ci/shims:/usr/bin:/bin" sh -c 'node --version'
+      - name: Per directory versions
+        run: |
+          export POLYVM_DIR="$HOME/polyvm-ci"
+          . "$POLYVM_DIR/polyvm.sh"
+          mkdir -p /tmp/proj && cd /tmp/proj
+          polyvm local nodejs 22.14.0
+          test "$(node --version)" = "v22.14.0"
+          polyvm current nodejs
+
+  python:
+    name: build python from source
+    runs-on: ${{ matrix.os }}
+    # Compiling CPython is slow, so keep it off the pull request path.
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dependencies
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq build-essential zlib1g-dev libssl-dev \
+              libbz2-dev libffi-dev libsqlite3-dev libreadline-dev liblzma-dev \
+              libncursesw5-dev tk-dev uuid-dev
+          else
+            brew install openssl@3 readline sqlite3 xz zlib || true
+          fi
+      - name: Install polyvm
+        run: POLYVM_DIR="$HOME/polyvm-ci" POLYVM_NO_RC=1 ./install.sh
+      - name: Build Python and check the standard library came out whole
+        run: |
+          export POLYVM_DIR="$HOME/polyvm-ci"
+          export POLYVM_PYTHON_OPTIMIZE=no
+          . "$POLYVM_DIR/polyvm.sh"
+          polyvm plugin add python
+          polyvm install python 3.13.1
+          polyvm global python 3.13.1
+          python --version
+          python -c "import ssl, sqlite3, lzma, bz2, ctypes, readline; print('stdlib ok')"
+          pip --version

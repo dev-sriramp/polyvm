@@ -1,0 +1,483 @@
+#!/usr/bin/env bash
+# polyvm - polyglot version manager
+# One tool to install and switch every language runtime on your machine.
+#
+# Targets bash 3.2 so it runs on stock macOS as well as Linux.
+
+set -uo pipefail
+
+# ------------------------------------------------------- locate our own dir
+# realpath(1) is missing on stock macOS, so resolve symlinks by hand.
+polyvm_resolve_self() {
+  local src="${BASH_SOURCE[0]}" dir
+  while [ -h "$src" ]; do
+    dir="$( cd -P "$( dirname "$src" )" && pwd )"
+    src="$( readlink "$src" )"
+    case "$src" in
+      /*) : ;;
+      *) src="${dir}/${src}" ;;
+    esac
+  done
+  cd -P "$( dirname "$src" )/.." && pwd
+}
+
+POLYVM_SELF_DIR="$(polyvm_resolve_self)"
+: "${POLYVM_DIR:=$POLYVM_SELF_DIR}"
+export POLYVM_DIR
+
+POLYVM_LIB="${POLYVM_SELF_DIR}/lib"
+# shellcheck source=lib/core.sh
+. "${POLYVM_LIB}/core.sh"
+polyvm_init_paths
+polyvm_init_colors
+# shellcheck source=lib/util.sh
+. "${POLYVM_LIB}/util.sh"
+# shellcheck source=lib/version.sh
+. "${POLYVM_LIB}/version.sh"
+# shellcheck source=lib/compat.sh
+. "${POLYVM_LIB}/compat.sh"
+# shellcheck source=lib/plugin.sh
+. "${POLYVM_LIB}/plugin.sh"
+# shellcheck source=lib/shim.sh
+. "${POLYVM_LIB}/shim.sh"
+# shellcheck source=lib/install.sh
+. "${POLYVM_LIB}/install.sh"
+# shellcheck source=lib/update.sh
+. "${POLYVM_LIB}/update.sh"
+
+# ------------------------------------------------------------------- help
+
+polyvm_usage() {
+  cat <<'POLYVM_USAGE'
+polyvm - one version manager for every language
+
+USAGE
+  polyvm <command> [args]
+
+RUNTIMES
+  install                          install everything in .polyvm-versions
+  install <plugin> <version>       install one version (or "latest", "latest:20")
+  uninstall <plugin> <version>     remove an installed version
+  list [plugin]                    list what is installed
+  list-all <plugin> [query]        list every version available to install
+  latest <plugin> [query]          print the newest stable version
+
+VERSIONS
+  global <plugin> <version>        set the default version for your user
+  local <plugin> <version>         set the version for this directory
+  shell <plugin> <version>         set the version for this shell only
+  current [plugin]                 show the active version and where it came from
+  where <plugin> [version]         print the install directory
+  which <command>                  print the binary that would run
+
+PLUGINS
+  plugin add <name> [git-url]      add a language (asdf plugins work as is)
+  plugin list [--urls] [--refs]    list installed plugins
+  plugin remove <name>             remove a plugin and its versions
+  plugin update <name|--all>       update plugin definitions
+  plugin search [query]            search the plugin index
+
+RUNNING
+  exec <plugin> <command> [args]   run a command with a plugin's version active
+  env <plugin> [command]           print (or run under) a plugin's environment
+  reshim [plugin] [version]        rebuild the shims
+
+MAINTENANCE
+  doctor                           check the installation
+  update                           update polyvm itself
+  init <bash|zsh>                  print the shell integration snippet
+  version                          print the polyvm version
+
+ENVIRONMENT
+  POLYVM_DIR         where polyvm lives (default ~/.polyvm)
+  POLYVM_DATA_DIR    where plugins and runtimes live (default POLYVM_DIR)
+  POLYVM_CONCURRENCY build parallelism passed to plugins
+  POLYVM_DEBUG       set to any value for verbose output
+  NO_COLOR           disable colored output
+POLYVM_USAGE
+}
+
+# --------------------------------------------------------------- commands
+
+cmd_current() {
+  local plugin="${1:-}"
+  if [ -n "$plugin" ]; then
+    polyvm_require_plugin "$plugin"
+    if ! polyvm_resolve_version_var "$plugin" 2>/dev/null; then
+      printf '%-16s %-16s %s\n' "$plugin" "not set" "no version file sets it"
+      return 1
+    fi
+    printf '%-16s %-16s %s\n' "$plugin" "$POLYVM_RESOLVED_VERSION" "${POLYVM_VERSION_SOURCE:-unknown}"
+    return 0
+  fi
+
+  local any="" p
+  for p in $(polyvm_all_plugins_in_scope); do
+    polyvm_plugin_installed "$p" || continue
+    any=yes
+    cmd_current "$p" || true
+  done
+  [ -n "$any" ] || polyvm_info "no plugins installed. Try: polyvm plugin add <name>"
+}
+
+cmd_where() {
+  local plugin="$1" version="${2:-}"
+  polyvm_require_plugin "$plugin"
+  [ -n "$version" ] || version="$(polyvm_resolve_version "$plugin" 2>/dev/null || true)"
+  [ -n "$version" ] || polyvm_die "no version of '$plugin' is set for this directory"
+  [ "$version" = "system" ] && { printf 'system\n'; return 0; }
+  local dirname path
+  dirname="$(polyvm_version_dirname "$version")"
+  path="${POLYVM_INSTALL_DIR}/${plugin}/${dirname}"
+  [ -d "$path" ] || polyvm_die "${plugin} ${version} is not installed"
+  printf '%s\n' "$path"
+}
+
+cmd_which() {
+  local cmd="$1"
+  local rc
+  polyvm_resolve_command_var "$cmd"
+  rc=$?
+  if [ $rc -eq 2 ]; then
+    polyvm_die "no version of ${POLYVM_RESOLVE_HINT%% *} is installed for this directory.
+  Wanted: ${POLYVM_RESOLVE_HINT}
+  Install it with: polyvm install ${POLYVM_RESOLVE_HINT}"
+  fi
+  if [ $rc -ne 0 ] || [ -z "$POLYVM_CMD_PATH" ]; then
+    polyvm_die "polyvm does not manage '$cmd' in this directory"
+  fi
+  printf '%s\n' "$POLYVM_CMD_PATH"
+}
+
+cmd_exec() {
+  local plugin="$1"
+  shift
+  [ $# -gt 0 ] || polyvm_die "usage: polyvm exec <plugin> <command> [args]"
+  polyvm_require_plugin "$plugin"
+  local version dirname
+  version="$(polyvm_resolve_version "$plugin" 2>/dev/null || true)"
+  [ -n "$version" ] || polyvm_die "no version of '$plugin' is set for this directory"
+  [ "$version" = "system" ] && { PATH="$(polyvm_path_without_shims)" exec "$@"; }
+  dirname="$(polyvm_version_dirname "$version")"
+  polyvm_version_installed "$plugin" "$dirname" \
+    || polyvm_die "${plugin} ${version} is not installed. Run: polyvm install ${plugin} ${version}"
+  polyvm_apply_exec_env "$plugin" "$dirname"
+  exec "$@"
+}
+
+cmd_env() {
+  local plugin="$1"
+  shift
+  polyvm_require_plugin "$plugin"
+  local version dirname
+  version="$(polyvm_resolve_version "$plugin" 2>/dev/null || true)"
+  [ -n "$version" ] || polyvm_die "no version of '$plugin' is set for this directory"
+  dirname="$(polyvm_version_dirname "$version")"
+  polyvm_apply_exec_env "$plugin" "$dirname"
+  if [ $# -gt 0 ]; then
+    exec "$@"
+  fi
+  env
+}
+
+# Printed by the shell function so `polyvm shell` can change the current shell.
+cmd_shell_env() {
+  local plugin="$1" version="$2"
+  polyvm_require_plugin "$plugin"
+  local env_name
+  env_name="$(polyvm_env_name "$plugin")"
+  if [ "$version" = "--unset" ] || [ "$version" = "unset" ]; then
+    printf 'unset POLYVM_%s_VERSION\n' "$env_name"
+    return 0
+  fi
+  if [ "$version" != "system" ]; then
+    local dirname
+    dirname="$(polyvm_version_dirname "$version")"
+    polyvm_version_installed "$plugin" "$dirname" \
+      || polyvm_die "${plugin} ${version} is not installed. Run: polyvm install ${plugin} ${version}"
+  fi
+  printf 'export POLYVM_%s_VERSION=%s\n' "$env_name" "$version"
+}
+
+cmd_plugin() {
+  local sub="${1:-list}"
+  shift || true
+  case "$sub" in
+    add)
+      [ $# -ge 1 ] || polyvm_die "usage: polyvm plugin add <name> [git-url] [git-ref]"
+      polyvm_plugin_add "$@"
+      ;;
+    list|ls) polyvm_plugin_list "$@" ;;
+    remove|rm)
+      [ $# -eq 1 ] || polyvm_die "usage: polyvm plugin remove <name>"
+      polyvm_plugin_remove "$1"
+      ;;
+    update|up)
+      [ $# -ge 1 ] || polyvm_die "usage: polyvm plugin update <name|--all> [ref]"
+      polyvm_plugin_update "$@"
+      ;;
+    search|find) polyvm_plugin_index_search "${1:-}" ;;
+    *) polyvm_die "unknown plugin subcommand: $sub" ;;
+  esac
+}
+
+cmd_doctor() {
+  local problems=0
+
+  printf 'polyvm       %s\n' "$POLYVM_VERSION"
+  printf 'POLYVM_DIR   %s\n' "$POLYVM_DIR"
+  printf 'data dir     %s\n' "$POLYVM_DATA_DIR"
+  printf 'platform     %s/%s\n' "$(polyvm_os)" "$(polyvm_arch)"
+  printf 'bash         %s\n' "${BASH_VERSION:-unknown}"
+  printf '\n'
+
+  if ! polyvm_platform_supported; then
+    printf '  note     %s is not fully supported yet, see docs/windows.md\n' "$(polyvm_os)"
+  fi
+
+  local tool
+  for tool in git curl tar; do
+    if polyvm_has "$tool"; then
+      printf '  ok       %s found\n' "$tool"
+    else
+      printf '  MISSING  %s is required\n' "$tool"
+      problems=$((problems + 1))
+    fi
+  done
+
+  if printf '%s' ":${PATH}:" | grep -q ":${POLYVM_SHIM_DIR}:"; then
+    printf '  ok       shims are on PATH\n'
+  else
+    printf '  MISSING  %s is not on PATH\n' "$POLYVM_SHIM_DIR"
+    printf '           add this to your shell rc file:\n'
+    # shellcheck disable=SC2016  # $PATH is literal text for the user to paste
+    printf '             export PATH="%s:$PATH"\n' "$POLYVM_SHIM_DIR"
+    problems=$((problems + 1))
+  fi
+
+  if [ -n "${POLYVM_SHELL_INTEGRATION:-}" ]; then
+    printf '  ok       shell integration is loaded\n'
+  else
+    # shellcheck disable=SC2016  # backticks are literal text
+    printf '  note     shell integration is not loaded, `polyvm shell` will not work\n'
+    printf '           add this to your shell rc file:\n'
+    printf '             . "%s/polyvm.sh"\n' "$POLYVM_DIR"
+  fi
+
+  local count=0 entry
+  for entry in "$POLYVM_PLUGIN_DIR"/*; do
+    [ -d "$entry" ] && count=$((count + 1))
+  done
+  printf '  ok       %s plugin(s) installed\n' "$count"
+
+  printf '\n'
+  if [ "$problems" -eq 0 ]; then
+    polyvm_ok "everything looks fine"
+    return 0
+  fi
+  polyvm_err "$problems problem(s) found"
+  return 1
+}
+
+cmd_update() {
+  [ -d "${POLYVM_DIR}/.git" ] \
+    || polyvm_die "polyvm was not installed from git, update it the way you installed it"
+
+  local from="$POLYVM_VERSION" latest=""
+  polyvm_step "checking for a newer polyvm"
+  latest="$(polyvm_update_latest_now || true)"
+
+  if [ -n "$latest" ] && ! polyvm_version_gt "$latest" "$from"; then
+    polyvm_ok "polyvm ${from} is already the newest release"
+    return 0
+  fi
+
+  if [ -n "$latest" ]; then
+    polyvm_step "updating polyvm ${from} to ${latest}"
+  else
+    polyvm_step "updating polyvm from the default branch"
+  fi
+
+  ( cd "$POLYVM_DIR" && git fetch --quiet --tags origin ) \
+    || polyvm_die "could not reach the polyvm repository"
+
+  if [ -n "$latest" ]; then
+    # Prefer the release tag, with or without a leading v.
+    ( cd "$POLYVM_DIR" && { git checkout --quiet "v${latest}" 2>/dev/null \
+        || git checkout --quiet "$latest" 2>/dev/null; } ) \
+      || polyvm_die "could not check out the ${latest} release"
+  else
+    ( cd "$POLYVM_DIR" && git pull --quiet --ff-only ) \
+      || polyvm_die "could not update polyvm.
+  You may be on a branch with local changes. Check with:
+    cd ${POLYVM_DIR} && git status"
+  fi
+
+  local to="$from"
+  [ -r "${POLYVM_DIR}/VERSION" ] && to="$(tr -d '[:space:]' < "${POLYVM_DIR}/VERSION")"
+
+  # Built-in plugins already added stay on the old copy until refreshed.
+  if polyvm_dir_has_entries "$POLYVM_PLUGIN_DIR"; then
+    local dir name
+    for dir in "$POLYVM_PLUGIN_DIR"/*; do
+      [ -d "$dir" ] || continue
+      name="$(basename "$dir")"
+      if [ "$(cat "${dir}/.polyvm-source-url" 2>/dev/null)" = "builtin" ]; then
+        polyvm_plugin_update_one "$name" >/dev/null 2>&1 \
+          || polyvm_warn "could not refresh the built-in plugin ${name}"
+      fi
+    done
+  fi
+
+  if [ "$to" != "$from" ]; then
+    polyvm_ok "updated polyvm ${from} to ${to}"
+  else
+    polyvm_ok "polyvm is up to date"
+  fi
+}
+
+cmd_init() {
+  local shell="${1:-}"
+  case "$shell" in
+    bash|zsh)
+      printf 'export POLYVM_DIR="%s"\n' "$POLYVM_DIR"
+      # shellcheck disable=SC2016  # $PATH is literal, the user's shell expands it
+      printf 'export PATH="%s:$PATH"\n' "$POLYVM_SHIM_DIR"
+      printf '. "%s/polyvm.sh"\n' "$POLYVM_DIR"
+      ;;
+    "")
+      polyvm_die "usage: polyvm init <bash|zsh>"
+      ;;
+    *)
+      polyvm_die "unsupported shell: $shell (bash and zsh are supported)"
+      ;;
+  esac
+}
+
+# --------------------------------------------------------------- dispatch
+
+main() {
+  if [ $# -eq 0 ]; then
+    polyvm_usage
+    return 0
+  fi
+
+  local cmd="$1"
+  shift
+
+  case "$cmd" in
+    exec-shim)
+      # Internal. Called by generated shims, so keep it first and cheap.
+      [ $# -ge 1 ] || polyvm_die "exec-shim needs a command name"
+      polyvm_exec_shim "$@"
+      ;;
+    help|--help|-h) polyvm_usage ;;
+    version|--version|-v) printf 'polyvm %s\n' "$POLYVM_VERSION" ;;
+    install|i)
+      polyvm_ensure_dirs
+      if [ $# -eq 0 ]; then
+        polyvm_install_from_files
+      elif [ $# -eq 1 ]; then
+        polyvm_install_version "$1" "latest"
+      else
+        polyvm_install_version "$1" "$2" "${3:-}"
+      fi
+      ;;
+    uninstall)
+      [ $# -eq 2 ] || polyvm_die "usage: polyvm uninstall <plugin> <version>"
+      polyvm_uninstall_version "$1" "$2"
+      ;;
+    list|ls) polyvm_list_installed "${1:-}" ;;
+    list-all|ls-all)
+      [ $# -ge 1 ] || polyvm_die "usage: polyvm list-all <plugin> [query]"
+      polyvm_list_all "$1" "${2:-}"
+      ;;
+    latest)
+      [ $# -ge 1 ] || polyvm_die "usage: polyvm latest <plugin> [query]"
+      polyvm_latest_version "$1" "${2:-}"
+      ;;
+    current) cmd_current "${1:-}" ;;
+    global)
+      [ $# -ge 2 ] || polyvm_die "usage: polyvm global <plugin> <version> [fallback...]"
+      polyvm_require_plugin "$1"
+      local g_plugin="$1"; shift
+      polyvm_set_global "$g_plugin" "$@"
+      polyvm_ok "global ${g_plugin} set to $*"
+      ;;
+    local)
+      [ $# -ge 2 ] || polyvm_die "usage: polyvm local <plugin> <version> [fallback...]"
+      polyvm_require_plugin "$1"
+      local l_plugin="$1"; shift
+      local l_file
+      l_file="$(polyvm_set_local "$l_plugin" "$@")"
+      polyvm_ok "${l_plugin} set to $* in ${l_file}"
+      ;;
+    shell)
+      polyvm_err "\`polyvm shell\` needs the shell integration."
+      polyvm_err "Add this to your shell rc file, then open a new shell:"
+      polyvm_err "  . \"${POLYVM_DIR}/polyvm.sh\""
+      return 1
+      ;;
+    shell-env)
+      [ $# -eq 2 ] || polyvm_die "usage: polyvm shell-env <plugin> <version>"
+      cmd_shell_env "$1" "$2"
+      ;;
+    where)
+      [ $# -ge 1 ] || polyvm_die "usage: polyvm where <plugin> [version]"
+      cmd_where "$1" "${2:-}"
+      ;;
+    which)
+      [ $# -eq 1 ] || polyvm_die "usage: polyvm which <command>"
+      cmd_which "$1"
+      ;;
+    exec)
+      [ $# -ge 2 ] || polyvm_die "usage: polyvm exec <plugin> <command> [args]"
+      cmd_exec "$@"
+      ;;
+    env)
+      [ $# -ge 1 ] || polyvm_die "usage: polyvm env <plugin> [command]"
+      cmd_env "$@"
+      ;;
+    reshim)
+      polyvm_ensure_dirs
+      if [ $# -eq 0 ]; then
+        polyvm_reshim_all
+        polyvm_ok "rebuilt every shim"
+      else
+        polyvm_reshim "$1" "${2:-}"
+        polyvm_ok "rebuilt shims for $1"
+      fi
+      ;;
+    plugin|plugins)
+      polyvm_ensure_dirs
+      cmd_plugin "$@"
+      ;;
+    doctor) cmd_doctor ;;
+    update|upgrade) cmd_update ;;
+    init) cmd_init "${1:-}" ;;
+    *)
+      polyvm_err "unknown command: $cmd"
+      polyvm_info ""
+      polyvm_usage
+      return 1
+      ;;
+  esac
+}
+
+# Commands where an upgrade notice would be noise: the shim hot path, output
+# meant to be parsed, and anything a script evals.
+polyvm_notice_wanted() {
+  case "${1:-}" in
+    exec-shim|shell-env|which|where|current|list-all|latest|init|version|--version|-v)
+      return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+POLYVM_FIRST_ARG="${1:-}"
+main "$@"
+POLYVM_EXIT=$?
+if polyvm_notice_wanted "$POLYVM_FIRST_ARG"; then
+  polyvm_update_notice
+fi
+exit $POLYVM_EXIT

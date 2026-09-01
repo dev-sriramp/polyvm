@@ -1,0 +1,21 @@
+# runtime data, never committed
+shims/
+installs/
+downloads/
+plugins/
+tmp/
+versions
+
+# editor / os
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# test scratch
+test/tmp/
+
+# python-build checkout and other caches
+cache/
+plugin-index/
+compat/

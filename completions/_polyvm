@@ -1,0 +1,61 @@
+#compdef polyvm
+# zsh completion for polyvm
+
+_polyvm_data_dir() {
+  print -r -- "${POLYVM_DATA_DIR:-${POLYVM_DIR:-$HOME/.polyvm}}"
+}
+
+_polyvm() {
+  local -a commands
+  commands=(
+    'install:install a runtime version'
+    'uninstall:remove an installed version'
+    'list:list installed versions'
+    'list-all:list every available version'
+    'latest:print the newest stable version'
+    'global:set the default version for your user'
+    'local:set the version for this directory'
+    'shell:set the version for this shell'
+    'current:show the active version'
+    'where:print an install directory'
+    'which:print the binary that would run'
+    'exec:run a command with a version active'
+    'env:print or run under a plugin environment'
+    'reshim:rebuild the shims'
+    'plugin:manage language plugins'
+    'doctor:check the installation'
+    'update:update polyvm itself'
+    'init:print the shell integration snippet'
+    'version:print the polyvm version'
+  )
+
+  if (( CURRENT == 2 )); then
+    _describe 'command' commands
+    return
+  fi
+
+  local data_dir
+  data_dir="$(_polyvm_data_dir)"
+
+  case "${words[2]}" in
+    plugin|plugins)
+      if (( CURRENT == 3 )); then
+        _values 'subcommand' add list remove update search
+      elif (( CURRENT == 4 )) && [[ "${words[3]}" != "add" ]]; then
+        _path_files -W "${data_dir}/plugins" -/
+      fi
+      ;;
+    install|uninstall|list-all|latest|global|local|shell|current|where|exec|env|reshim)
+      if (( CURRENT == 3 )); then
+        _path_files -W "${data_dir}/plugins" -/
+      elif (( CURRENT == 4 )); then
+        _path_files -W "${data_dir}/installs/${words[3]}" -/
+      fi
+      ;;
+    init)
+      _values 'shell' bash zsh
+      ;;
+  esac
+}
+
+_polyvm "$@"
