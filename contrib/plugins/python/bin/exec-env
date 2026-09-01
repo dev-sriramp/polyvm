@@ -1,0 +1,3 @@
+# Sourced before a Python binary runs.
+# PYTHONHOME set for one version breaks every other version, so clear it.
+unset PYTHONHOME

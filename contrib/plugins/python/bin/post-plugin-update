@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+update_python_build

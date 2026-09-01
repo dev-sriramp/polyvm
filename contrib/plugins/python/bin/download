@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Fetch the CPython source tarball into $ASDF_DOWNLOAD_PATH ahead of the build.
+# bin/install points python-build's cache at the same directory, so a failed
+# build can be retried without downloading again.
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+
+version="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION is not set}"
+dest="${ASDF_DOWNLOAD_PATH:?ASDF_DOWNLOAD_PATH is not set}"
+
+if [ "${ASDF_INSTALL_TYPE:-version}" = "ref" ]; then
+  msg "==> ref installs are fetched by python-build, skipping the download step"
+  exit 0
+fi
+
+ensure_definition "$version" || die "no build recipe for Python ${version}.
+  Run 'polyvm list-all python' to see what is available."
+
+source_info="$(definition_source_url "$version" || true)"
+if [ -z "$source_info" ]; then
+  msg "==> no single source tarball for ${version}, python-build will fetch what it needs"
+  exit 0
+fi
+
+url="$(printf '%s' "$source_info" | cut -f1)"
+sha="$(printf '%s' "$source_info" | cut -f2)"
+file="${dest}/$(basename "$url")"
+
+mkdir -p "$dest"
+
+if [ -f "$file" ] && [ -n "$sha" ] && [ "$(sha256_of "$file")" = "$sha" ]; then
+  msg "==> already downloaded $(basename "$url")"
+  exit 0
+fi
+
+msg "==> downloading $(basename "$url")"
+if has curl; then
+  curl --fail --location --progress-bar --retry 3 --connect-timeout 20 -o "$file" "$url" \
+    || die "download failed: $url"
+elif has wget; then
+  wget --tries=3 --timeout=20 -O "$file" "$url" || die "download failed: $url"
+else
+  die "neither curl nor wget is available"
+fi
+
+if [ -n "$sha" ]; then
+  actual="$(sha256_of "$file")"
+  if [ -n "$actual" ] && [ "$actual" != "$sha" ]; then
+    rm -f "$file"
+    die "checksum mismatch for $(basename "$url")
+  expected $sha
+  actual   $actual"
+  fi
+  msg "==> checksum verified"
+fi

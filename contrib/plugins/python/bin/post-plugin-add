@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+ensure_python_build
+count="$(list_definitions | wc -l | tr -d ' ')"
+msg "==> ${count} Python versions are available to install"
+msg "    try: polyvm install python latest"

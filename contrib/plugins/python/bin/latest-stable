@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Newest stable CPython, optionally filtered by a prefix such as 3.12
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+
+query="${1:-}"
+if [ -n "$query" ]; then
+  stable_cpython_versions | grep -E "^${query}" | tail -n1
+else
+  stable_cpython_versions | tail -n1
+fi

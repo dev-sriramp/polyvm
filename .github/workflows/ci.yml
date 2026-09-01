@@ -15,6 +15,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: No source file is accidentally gitignored
+        # An unanchored pattern in .gitignore matches at any depth. "plugins/"
+        # once excluded contrib/plugins, dropping the built-in Python plugin
+        # from the repository while everything still passed locally.
+        run: |
+          leaked="$(git ls-files --others --ignored --exclude-standard             | grep -E '^(bin|lib|contrib|test|scripts|completions|docs|\.github)/' || true)"
+          if [ -n "$leaked" ]; then
+            echo "these source files are ignored by .gitignore and would not ship:" >&2
+            echo "$leaked" >&2
+            exit 1
+          fi
+          echo "no source file is ignored"
+      - name: Every file the build references is tracked
+        run: |
+          missing=""
+          for f in $(make -s print-sources); do
+            git ls-files --error-unmatch "$f" >/dev/null 2>&1 || missing="$missing $f"
+          done
+          if [ -n "$missing" ]; then
+            echo "referenced by the build but not tracked by git:$missing" >&2
+            exit 1
+          fi
+          echo "every referenced file is tracked"
       - name: Install shellcheck
         run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
       - name: Syntax

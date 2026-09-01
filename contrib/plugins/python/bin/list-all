@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Print every installable Python version, oldest first, space separated.
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+
+# Refresh the recipes at most once a day so new releases show up without a
+# network call on every listing.
+ensure_python_build
+if ! python_build_is_fresh; then
+  update_python_build >/dev/null 2>&1 || true
+fi
+
+list_definitions | tr '\n' ' '
+printf '\n'

@@ -1,21 +1,26 @@
-# runtime data, never committed
-shims/
-installs/
-downloads/
-plugins/
-tmp/
-versions
+# Runtime data. These appear only when polyvm's data dir is the checkout
+# itself, which is the normal install (a clone into ~/.polyvm).
+#
+# Every one of these is anchored with a leading slash. Without it git matches
+# the pattern at any depth, and an unanchored "plugins/" also excludes
+# contrib/plugins, quietly dropping the built-in plugins from the repository.
+/shims/
+/installs/
+/downloads/
+/plugins/
+/tmp/
+/cache/
+/plugin-index/
+/compat/
+/versions
+/.update-check
 
-# editor / os
+# Editor and OS files, which should be ignored at any depth.
 .DS_Store
 *.swp
+*~
 .idea/
 .vscode/
 
-# test scratch
-test/tmp/
-
-# python-build checkout and other caches
-cache/
-plugin-index/
-compat/
+# Test scratch
+/test/tmp/

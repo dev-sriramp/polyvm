@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# pyenv writes .python-version. Read it so existing projects work unchanged.
+echo ".python-version"

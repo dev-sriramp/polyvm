@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Compile and install a Python version, the way pyenv does.
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+
+version="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION is not set}"
+install_path="${ASDF_INSTALL_PATH:?ASDF_INSTALL_PATH is not set}"
+install_type="${ASDF_INSTALL_TYPE:-version}"
+download_path="${ASDF_DOWNLOAD_PATH:-}"
+concurrency="${ASDF_CONCURRENCY:-1}"
+
+if [ "$install_type" = "ref" ]; then
+  die "installing from a git ref is not supported for Python.
+  python-build works from released source tarballs. For a development build,
+  use a dev recipe instead, for example:
+    polyvm install python 3.14-dev"
+fi
+
+check_build_deps
+setup_darwin_build_env
+
+ensure_definition "$version" || die "no build recipe for Python ${version}.
+  Run 'polyvm list-all python' to see what is available."
+
+# Reuse whatever bin/download already fetched.
+if [ -n "$download_path" ] && [ -d "$download_path" ]; then
+  export PYTHON_BUILD_CACHE_PATH="$download_path"
+fi
+
+export MAKE_OPTS="${MAKE_OPTS:--j${concurrency}}"
+export MAKEOPTS="${MAKEOPTS:-$MAKE_OPTS}"
+
+# Optimised builds are noticeably faster at runtime and cost build time.
+# On by default, matching what most people want; opt out for a quick install.
+if [ "${POLYVM_PYTHON_OPTIMIZE:-yes}" = "yes" ]; then
+  case "${PYTHON_CONFIGURE_OPTS:-}" in
+    *--enable-optimizations*) : ;;
+    *) export PYTHON_CONFIGURE_OPTS="--enable-optimizations --with-lto ${PYTHON_CONFIGURE_OPTS:-}" ;;
+  esac
+fi
+
+msg "==> building Python ${version}, this takes a few minutes"
+msg "    parallelism: ${MAKE_OPTS}"
+
+verbose_flag=""
+[ -n "${POLYVM_DEBUG:-}" ] && verbose_flag="-v"
+
+# shellcheck disable=SC2086
+if ! "$PYTHON_BUILD_BIN" $verbose_flag "$version" "$install_path"; then
+  die "the Python ${version} build failed.
+  Re-run with POLYVM_DEBUG=1 to see the full build log.
+  If a module was reported missing, install its development package and retry."
+fi
+
+# pyenv-default-packages parity: install a shared set of packages into every
+# new Python, listed one per line in $POLYVM_DATA_DIR/default-python-packages.
+default_packages="${POLYVM_DATA_DIR:-$HOME/.polyvm}/default-python-packages"
+if [ -f "$default_packages" ] && [ -x "${install_path}/bin/pip" ]; then
+  msg "==> installing default packages from ${default_packages}"
+  grep -v -E '^\s*(#|$)' "$default_packages" | while IFS= read -r package; do
+    [ -n "$package" ] || continue
+    # shellcheck disable=SC2086
+    "${install_path}/bin/pip" install --quiet --disable-pip-version-check $package \
+      || warn "could not install default package: ${package}"
+  done
+fi
+
+msg "==> Python ${version} installed"

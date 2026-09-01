@@ -7,7 +7,7 @@ SOURCES := bin/polyvm lib/core.sh lib/util.sh lib/version.sh lib/plugin.sh \
            contrib/plugins/python/lib/helpers.sh \
            $(wildcard contrib/plugins/python/bin/*)
 
-.PHONY: help test lint syntax check sandbox sandbox-clean docker release install uninstall
+.PHONY: help test lint syntax check sandbox sandbox-clean docker release install uninstall print-sources
 
 help:
 	@echo "make test      run the test suite"
@@ -23,6 +23,9 @@ help:
 
 test:
 	@./test/run.sh
+
+print-sources:
+	@echo $(SOURCES)
 
 syntax:
 	@for f in $(SOURCES); do bash -n "$$f" || exit 1; done
