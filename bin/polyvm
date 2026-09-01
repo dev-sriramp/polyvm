@@ -57,9 +57,9 @@ USAGE
 RUNTIMES
   install                          install everything in .polyvm-versions
   install <plugin> <version>       install one version (or "latest", "latest:20")
+  list-all <plugin> [query]        every version you can install
   uninstall <plugin> <version>     remove an installed version
-  list [plugin]                    list what is installed
-  list-all <plugin> [query]        list every version available to install
+  list [plugin]                    list the versions you have installed
   latest <plugin> [query]          print the newest stable version
 
 VERSIONS
@@ -71,11 +71,11 @@ VERSIONS
   which <command>                  print the binary that would run
 
 PLUGINS
+  plugin available [query]         every language you can add
   plugin add <name> [git-url]      add a language (asdf plugins work as is)
-  plugin list [--urls] [--refs]    list installed plugins
+  plugin list [--urls] [--refs]    list the plugins you have added
   plugin remove <name>             remove a plugin and its versions
   plugin update <name|--all>       update plugin definitions
-  plugin search [query]            search the plugin index
 
 RUNNING
   exec <plugin> <command> [args]   run a command with a plugin's version active
@@ -83,7 +83,7 @@ RUNNING
   reshim [plugin] [version]        rebuild the shims
 
 MAINTENANCE
-  doctor                           check the installation
+  doctor [plugin]                  check the install, or a language's prerequisites
   update                           update polyvm itself
   init <bash|zsh>                  print the shell integration snippet
   version                          print the polyvm version
@@ -216,12 +216,30 @@ cmd_plugin() {
       [ $# -ge 1 ] || polyvm_die "usage: polyvm plugin update <name|--all> [ref]"
       polyvm_plugin_update "$@"
       ;;
-    search|find) polyvm_plugin_index_search "${1:-}" ;;
+    available|list-all|ls-all) polyvm_plugin_available "${1:-}" ;;
+    search|find) polyvm_plugin_available "${1:-}" ;;
     *) polyvm_die "unknown plugin subcommand: $sub" ;;
   esac
 }
 
 cmd_doctor() {
+  local plugin="${1:-}"
+
+  # `polyvm doctor <plugin>` answers "can I build this here", without
+  # downloading anything.
+  if [ -n "$plugin" ]; then
+    polyvm_require_plugin "$plugin"
+    if ! polyvm_plugin_has_hook "$plugin" preflight; then
+      polyvm_info "the ${plugin} plugin does not publish a prerequisite check"
+      return 0
+    fi
+    if polyvm_run_hook "$plugin" preflight; then
+      polyvm_ok "${plugin} can be installed on this machine"
+      return 0
+    fi
+    return 1
+  fi
+
   local problems=0
 
   printf 'polyvm       %s\n' "$POLYVM_VERSION"
@@ -236,7 +254,7 @@ cmd_doctor() {
   fi
 
   local tool
-  for tool in git curl tar; do
+  for tool in git tar; do
     if polyvm_has "$tool"; then
       printf '  ok       %s found\n' "$tool"
     else
@@ -244,6 +262,16 @@ cmd_doctor() {
       problems=$((problems + 1))
     fi
   done
+
+  # Either downloader will do.
+  if polyvm_has curl; then
+    printf '  ok       curl found\n'
+  elif polyvm_has wget; then
+    printf '  ok       wget found (curl is not installed, which is fine)\n'
+  else
+    printf '  MISSING  one of curl or wget is required\n'
+    problems=$((problems + 1))
+  fi
 
   if printf '%s' ":${PATH}:" | grep -q ":${POLYVM_SHIM_DIR}:"; then
     printf '  ok       shims are on PATH\n'
@@ -452,7 +480,7 @@ main() {
       polyvm_ensure_dirs
       cmd_plugin "$@"
       ;;
-    doctor) cmd_doctor ;;
+    doctor) cmd_doctor "${1:-}" ;;
     update|upgrade) cmd_update ;;
     init) cmd_init "${1:-}" ;;
     *)

@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/dev-sriramp/polyvm/main/install.sh 
 Then open a new shell. The installer clones polyvm into `~/.polyvm` and adds a
 block to your `.bashrc` and `.zshrc`.
 
-Requirements: bash, git, curl, tar. Linux and macOS. polyvm targets bash 3.2, so
+Requirements: bash, git, tar, and either curl or wget. Linux and macOS. polyvm targets bash 3.2, so
 the bash that ships with macOS is enough. Windows is a work in progress; WSL
 works today. See [docs/windows.md](docs/windows.md).
 
@@ -42,6 +42,13 @@ polyvm tells you when a new release is out and updates itself:
 
 ```sh
 polyvm update
+```
+
+Languages that compile from source need a toolchain. polyvm checks before it
+downloads anything, and tells you exactly what to install:
+
+```sh
+polyvm doctor python
 ```
 
 ## How versions are chosen
@@ -85,8 +92,10 @@ See [docs/python.md](docs/python.md).
 For everything else:
 
 ```sh
-polyvm plugin search rust
+polyvm plugin available          # every language you can add
+polyvm plugin available rust     # narrowed down
 polyvm plugin add rust
+polyvm list-all rust             # every version you can install
 ```
 
 Plugins follow the asdf plugin contract, so every existing asdf plugin works

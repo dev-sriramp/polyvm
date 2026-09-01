@@ -23,7 +23,7 @@ _polyvm() {
     'env:print or run under a plugin environment'
     'reshim:rebuild the shims'
     'plugin:manage language plugins'
-    'doctor:check the installation'
+    'doctor:check the install, or a language prerequisites'
     'update:update polyvm itself'
     'init:print the shell integration snippet'
     'version:print the polyvm version'
@@ -40,7 +40,7 @@ _polyvm() {
   case "${words[2]}" in
     plugin|plugins)
       if (( CURRENT == 3 )); then
-        _values 'subcommand' add list remove update search
+        _values 'subcommand' available add list remove update search
       elif (( CURRENT == 4 )) && [[ "${words[3]}" != "add" ]]; then
         _path_files -W "${data_dir}/plugins" -/
       fi

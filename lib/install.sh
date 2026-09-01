@@ -7,16 +7,51 @@
 POLYVM_UNSTABLE_PATTERN='(^|[-._])(alpha|beta|rc|pre|preview|dev|nightly|snapshot|next|canary|insiders|milestone|m[0-9]|ea|test)([-._0-9]|$)'
 
 # polyvm_list_all <plugin> [query]
+#
+# Prints one version per line when piped, so `polyvm list-all python | grep 3.13`
+# works. Lays them out in columns and adds a summary when a person is reading,
+# because a bare 1,090 line dump is not a useful answer to "what can I install".
 polyvm_list_all() {
   local plugin="$1" query="${2:-}"
   polyvm_require_plugin "$plugin"
-  local versions
-  versions="$(polyvm_run_required_hook "$plugin" list-all)" \
+
+  local raw versions count
+  raw="$(polyvm_run_required_hook "$plugin" list-all)" \
     || polyvm_die "the list-all hook for '$plugin' failed"
+
   # list-all prints a single space separated line by convention.
-  printf '%s\n' "$versions" | tr ' ' '\n' | sed '/^$/d' | {
+  versions="$(printf '%s\n' "$raw" | tr ' ' '\n' | sed '/^$/d' | {
     if [ -n "$query" ]; then grep -- "$query" || true; else cat; fi
-  }
+  })"
+
+  count="$(printf '%s' "$versions" | grep -c . || true)"
+
+  if [ "$count" -eq 0 ]; then
+    if [ -n "$query" ]; then
+      polyvm_info "no ${plugin} version matches '${query}'"
+      polyvm_info "see everything with: polyvm list-all ${plugin}"
+    else
+      polyvm_info "the ${plugin} plugin reported no installable versions"
+    fi
+    return 0
+  fi
+
+  printf '%s\n' "$versions" | polyvm_print_list
+
+  # Everything below is orientation for a human, so it goes to stderr and only
+  # when one is there.
+  [ -t 1 ] || return 0
+  local newest
+  newest="$(printf '%s\n' "$versions" | tail -n1)"
+  printf '\n' >&2
+  if [ -n "$query" ]; then
+    polyvm_info "${count} ${plugin} versions match '${query}'"
+  else
+    polyvm_info "${count} ${plugin} versions available"
+    polyvm_info "narrow the list with: polyvm list-all ${plugin} <query>"
+  fi
+  polyvm_info "install one with:     polyvm install ${plugin} ${newest}"
+  polyvm_info "or the newest stable: polyvm install ${plugin} latest"
 }
 
 # polyvm_latest_version <plugin> [query]
@@ -126,6 +161,20 @@ polyvm_install_version() {
   if [ -d "$install_path" ]; then
     polyvm_ok "${plugin} ${version} is already installed"
     return 0
+  fi
+
+  # Preflight before anything is downloaded. A missing compiler is not worth
+  # discovering after a 25 MB download and two minutes of configure.
+  if polyvm_plugin_has_hook "$plugin" preflight \
+     && [ -z "${POLYVM_SKIP_PREFLIGHT:-}" ]; then
+    POLYVM_INSTALL_VERSION="$version"
+    ASDF_INSTALL_VERSION="${version#ref:}"
+    export POLYVM_INSTALL_VERSION ASDF_INSTALL_VERSION
+    if ! polyvm_run_hook "$plugin" preflight; then
+      polyvm_die "${plugin} is not ready to build on this machine.
+  Fix the above, then run: polyvm install ${plugin} ${version}
+  To try anyway: POLYVM_SKIP_PREFLIGHT=1 polyvm install ${plugin} ${version}"
+    fi
   fi
 
   polyvm_step "installing ${plugin} ${version}"

@@ -1,6 +1,6 @@
 # Installing polyvm
 
-Works on Linux and macOS. Needs bash, git, curl and tar, and nothing else.
+Works on Linux and macOS. Needs bash, git, tar and either curl or wget, and nothing else.
 polyvm targets bash 3.2, so the bash that ships with macOS is enough.
 
 ## One line
@@ -63,6 +63,17 @@ polyvm install nodejs 22.14.0
 polyvm global nodejs 22.14.0
 node --version
 ```
+
+Languages that compile from source need a toolchain, and a slim container image
+has none. Ask before you install, rather than finding out after a download:
+
+```sh
+polyvm plugin add python
+polyvm doctor python
+```
+
+That prints the exact package command for the image you are in, and stops the
+install before anything is fetched if the toolchain is missing.
 
 In a Dockerfile, put the integration in the image environment rather than
 sourcing it per layer:

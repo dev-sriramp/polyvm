@@ -97,22 +97,82 @@ polyvm_plugin_index_url() {
   awk -F'=' '/^[[:space:]]*repository[[:space:]]*=/ { sub(/^[[:space:]]+/, "", $2); sub(/[[:space:]]+$/, "", $2); print $2; exit }' "$file"
 }
 
-polyvm_plugin_index_search() {
+# Every language you could add: the ones polyvm ships, then the plugin index.
+#
+# Piped, this prints one bare name per line so it can be grepped or fed to
+# `xargs polyvm plugin add`. On a terminal it adds headings, an "installed"
+# marker and the next command to run.
+polyvm_plugin_available() {
   local query="${1:-}"
+  local human=""
+  [ -t 1 ] && human=yes
 
-  # Built-ins first, so `polyvm plugin search python` shows the one polyvm
-  # ships before the community list.
-  local name
-  for name in $(polyvm_builtin_plugin_list); do
-    if [ -z "$query" ]; then
-      printf '%s\t(built in)\n' "$name"
-    else
-      case "$name" in
-        *"$query"*) printf '%s\t(built in)\n' "$name" ;;
-      esac
-    fi
+  local name builtins index_names index_count=0
+  builtins="$(polyvm_builtin_plugin_list)"
+
+  if [ -n "$builtins" ]; then
+    local shown=""
+    for name in $builtins; do
+      if [ -n "$query" ]; then
+        case "$name" in *"$query"*) : ;; *) continue ;; esac
+      fi
+      if [ -z "$shown" ] && [ -n "$human" ]; then
+        printf '%sbuilt in%s\n' "$POLYVM_C_BLUE" "$POLYVM_C_RESET" >&2
+        shown=yes
+      fi
+      polyvm_print_plugin_name "$name" "$human"
+    done
+    [ -n "$shown" ] && printf '\n' >&2
+  fi
+
+  polyvm_plugin_index_sync
+  if [ ! -d "${POLYVM_PLUGIN_INDEX_DIR}/plugins" ]; then
+    polyvm_warn "the plugin index is not available, only built-in plugins are listed"
+    return 0
+  fi
+
+  # A built-in shadows the index entry of the same name, so listing both would
+  # offer a choice that does not exist.
+  index_names="$(polyvm_plugin_index_search "$query" \
+    | { if [ -n "$builtins" ]; then grep -vxF "$builtins"; else cat; fi; })"
+  index_count="$(printf '%s' "$index_names" | grep -c . || true)"
+
+  if [ "$index_count" -eq 0 ]; then
+    [ -n "$query" ] && [ -z "$builtins" ] && polyvm_info "no plugin matches '${query}'"
+    return 0
+  fi
+
+  if [ -n "$human" ]; then
+    printf '%sfrom the plugin index (%s)%s\n' \
+      "$POLYVM_C_BLUE" "$index_count" "$POLYVM_C_RESET" >&2
+  fi
+
+  for name in $index_names; do
+    polyvm_print_plugin_name "$name" "$human"
   done
 
+  [ -n "$human" ] || return 0
+  printf '\n' >&2
+  [ -n "$query" ] || polyvm_info "narrow the list with: polyvm plugin available <query>"
+  polyvm_info "add one with:          polyvm plugin add <name>"
+}
+
+polyvm_print_plugin_name() {
+  local name="$1" human="$2"
+  if [ -z "$human" ]; then
+    printf '%s\n' "$name"
+  elif polyvm_plugin_installed "$name"; then
+    printf '  %-24s %sinstalled%s\n' "$name" "$POLYVM_C_GREEN" "$POLYVM_C_RESET"
+  else
+    printf '  %s\n' "$name"
+  fi
+}
+
+# Names in the asdf plugin index only. Built-ins are handled by
+# polyvm_plugin_available, which calls this; keeping them out of here means the
+# output is one bare name per line and safe to iterate over.
+polyvm_plugin_index_search() {
+  local query="${1:-}"
   polyvm_plugin_index_sync
   local dir="${POLYVM_PLUGIN_INDEX_DIR}/plugins"
   [ -d "$dir" ] || polyvm_die "plugin index is empty"
@@ -181,6 +241,16 @@ polyvm_run_required_hook() {
 
 # ---------------------------------------------------------------- commands
 
+# Adding a plugin installs nothing on its own, which is the most common point
+# of confusion. Say what to do next.
+polyvm_added_plugin_hint() {
+  local name="$1"
+  polyvm_info ""
+  polyvm_info "See what you can install:  polyvm list-all ${name}"
+  polyvm_info "Install the newest:        polyvm install ${name} latest"
+  polyvm_info "Then set it as default:    polyvm global ${name} latest"
+}
+
 # polyvm_plugin_add <name> [git-url] [git-ref]
 polyvm_plugin_add() {
   local name="$1" url="${2:-}" ref="${3:-}"
@@ -205,6 +275,7 @@ polyvm_plugin_add() {
     polyvm_run_hook "$name" post-plugin-add || \
       polyvm_warn "the post-plugin-add hook for '$name' failed"
     polyvm_ok "added plugin $name"
+    polyvm_added_plugin_hint "$name"
     return 0
   fi
 
@@ -237,6 +308,7 @@ polyvm_plugin_add() {
     polyvm_warn "the post-plugin-add hook for '$name' failed"
 
   polyvm_ok "added plugin $name"
+  polyvm_added_plugin_hint "$name"
 }
 
 polyvm_plugin_remove() {

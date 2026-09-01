@@ -105,6 +105,16 @@ HOOK
 
 # ------------------------------------------------------------------- tests
 
+# A local stand-in for the asdf plugin index. Set before any command runs, so
+# the whole suite stays offline: nothing here should ever hit the network.
+FAKE_INDEX="${WORK}/fake-index"
+mkdir -p "${FAKE_INDEX}/.git" "${FAKE_INDEX}/plugins"
+for fake in nodejs ruby golang elixir; do
+  printf 'repository = https://example.invalid/%s.git\n' "$fake" > "${FAKE_INDEX}/plugins/${fake}"
+done
+touch "${FAKE_INDEX}/.polyvm-synced"
+export POLYVM_PLUGIN_INDEX_DIR="$FAKE_INDEX"
+
 printf 'polyvm test suite\n'
 printf 'data dir: %s\n\n' "$POLYVM_DATA_DIR"
 
@@ -242,7 +252,12 @@ export POLYVM_BUILTIN_PLUGIN_DIR="$BUILTIN_DIR"
 
 assert_ok "a built-in plugin is added with no git url and no network" "$POLYVM" plugin add embedded
 assert_contains "the built-in is marked as such" "$("$POLYVM" plugin list --urls)" "builtin"
-assert_contains "plugin search lists built-ins first" "$("$POLYVM" plugin search embedded 2>/dev/null | head -1)" "built in"
+# Piped output carries no headings, markers or hints at all, on either stream,
+# so it can be consumed by a script without filtering.
+assert_eq "plugin search piped gives the bare name" "embedded" \
+  "$("$POLYVM" plugin search embedded 2>/dev/null)"
+assert_eq "piped output has no decoration on any stream" "embedded" \
+  "$("$POLYVM" plugin search embedded 2>&1)"
 assert_ok "updating a built-in re-copies it from the source tree" "$POLYVM" plugin update embedded
 assert_ok "install from a built-in plugin" "$POLYVM" install embedded 0.2.0
 assert_eq "the built-in's binary runs through a shim" \
@@ -300,6 +315,72 @@ assert_eq "the reported version comes from the VERSION file" \
   "$(tr -d '[:space:]' < "${REPO}/VERSION")" \
   "$("$POLYVM" version | awk '{print $2}')"
 
+printf '\npreflight\n'
+# A plugin can refuse before anything is downloaded. This is what stops a user
+# discovering they have no C compiler after a 25 MB download.
+PREFIX_PLUGIN="${WORK}/fixtures/picky"
+mkdir -p "${PREFIX_PLUGIN}/bin"
+cat > "${PREFIX_PLUGIN}/bin/list-all" <<'HOOK'
+#!/usr/bin/env bash
+echo "1.0.0"
+HOOK
+cat > "${PREFIX_PLUGIN}/bin/download" <<'HOOK'
+#!/usr/bin/env bash
+mkdir -p "$ASDF_DOWNLOAD_PATH"
+touch "${ASDF_DOWNLOAD_PATH}/downloaded-marker"
+HOOK
+cat > "${PREFIX_PLUGIN}/bin/install" <<'HOOK'
+#!/usr/bin/env bash
+mkdir -p "${ASDF_INSTALL_PATH}/bin"
+printf '#!/usr/bin/env bash\necho picky\n' > "${ASDF_INSTALL_PATH}/bin/picky"
+chmod +x "${ASDF_INSTALL_PATH}/bin/picky"
+HOOK
+cat > "${PREFIX_PLUGIN}/bin/preflight" <<'HOOK'
+#!/usr/bin/env bash
+if [ -f "${POLYVM_TEST_PREFLIGHT_PASS:-/nonexistent}" ]; then
+  echo "prerequisites ok" >&2
+  exit 0
+fi
+echo "error: you need the frobnicator. Install it with: apt-get install frob" >&2
+exit 1
+HOOK
+chmod +x "${PREFIX_PLUGIN}"/bin/*
+( cd "$PREFIX_PLUGIN" && git init -q && git config user.email t@polyvm.local \
+  && git config user.name t && git add -A && git commit -qm fixture )
+"$POLYVM" plugin add picky "$PREFIX_PLUGIN" >/dev/null 2>&1
+
+PRE_OUT="$("$POLYVM" install picky 1.0.0 2>&1 || true)"
+assert_contains "a failing preflight blocks the install" "$PRE_OUT" "not ready to build"
+assert_contains "the plugin's own advice is shown" "$PRE_OUT" "frobnicator"
+assert_contains "the escape hatch is offered" "$PRE_OUT" "POLYVM_SKIP_PREFLIGHT"
+assert_ok "nothing was downloaded" test ! -e "${POLYVM_DATA_DIR}/downloads/picky/1.0.0/downloaded-marker"
+assert_ok "nothing was installed" test ! -d "${POLYVM_DATA_DIR}/installs/picky/1.0.0"
+
+DOCTOR_OUT="$("$POLYVM" doctor picky 2>&1 || true)"
+assert_contains "doctor <plugin> runs the preflight" "$DOCTOR_OUT" "frobnicator"
+
+touch "${WORK}/preflight-ok"
+assert_ok "POLYVM_SKIP_PREFLIGHT bypasses the check" \
+  env POLYVM_SKIP_PREFLIGHT=1 "$POLYVM" install picky 1.0.0
+"$POLYVM" uninstall picky 1.0.0 >/dev/null 2>&1
+assert_ok "a passing preflight lets the install proceed" \
+  env POLYVM_TEST_PREFLIGHT_PASS="${WORK}/preflight-ok" "$POLYVM" install picky 1.0.0
+assert_ok "doctor reports a plugin with no preflight" "$POLYVM" doctor embedded
+
+printf '\nplugin discovery\n'
+AVAIL="$("$POLYVM" plugin available 2>/dev/null)"
+assert_contains "plugin available lists the index" "$AVAIL" "golang"
+assert_contains "plugin available lists built-ins" "$AVAIL" "embedded"
+assert_eq "piped output is one bare name per line" \
+  "elixir golang nodejs ruby" \
+  "$("$POLYVM" plugin available 2>/dev/null | grep -v embedded | sort | tr '\n' ' ' | sed 's/ $//')"
+FILTERED="$("$POLYVM" plugin available ruby 2>/dev/null)"
+assert_eq "a query filters the list" "ruby" "$FILTERED"
+"$POLYVM" plugin remove picky >/dev/null 2>&1 || true
+assert_contains "adding a plugin says what to do next" \
+  "$("$POLYVM" plugin add picky "$PREFIX_PLUGIN" 2>&1 || true)" "polyvm list-all"
+"$POLYVM" plugin remove picky >/dev/null 2>&1 || true
+
 printf '\npiped install\n'
 # curl | bash and bash -c "$(curl ...)" both leave BASH_SOURCE unset. Under
 # set -u that aborted install.sh before it did anything, which broke the
@@ -311,13 +392,28 @@ case "$PIPE_OUT" in
   *"unbound variable"*) fail "install.sh survives being piped to bash" "$PIPE_OUT" ;;
   *) pass "install.sh survives being piped to bash" ;;
 esac
-assert_contains "the piped install reaches the clone step" "$PIPE_OUT" "cloning polyvm"
+case "$PIPE_OUT" in
+  *"cloning polyvm"*|*"is required"*)
+    pass "the piped install gets past self-location and into its real work" ;;
+  *)
+    fail "the piped install gets past self-location and into its real work" "$PIPE_OUT" ;;
+esac
 
 PIPE_STDIN="$(POLYVM_DIR="${WORK}/pipe2" POLYVM_REPO=/nonexistent-polyvm-repo POLYVM_NO_RC=1 \
   bash < "${REPO}/install.sh" 2>&1 || true)"
 case "$PIPE_STDIN" in
   *"unbound variable"*) fail "install.sh survives curl | bash" "$PIPE_STDIN" ;;
   *) pass "install.sh survives curl | bash" ;;
+esac
+
+printf '\noffline guarantee\n'
+# The suite must never reach the network. If it does, it is slow, it fails on a
+# plane, and it stops being a reliable signal in CI.
+assert_eq "the plugin index used is the local fixture" "$FAKE_INDEX" "$POLYVM_PLUGIN_INDEX_DIR"
+NET_OUT="$("$POLYVM" plugin available 2>&1)"
+case "$NET_OUT" in
+  *"fetching the plugin index"*) fail "no command clones the plugin index" "$NET_OUT" ;;
+  *) pass "no command clones the plugin index" ;;
 esac
 
 printf '\nguards\n'

@@ -31,7 +31,11 @@ polyvm_init_paths() {
   POLYVM_SHIM_DIR="${POLYVM_DATA_DIR}/shims"
   POLYVM_TMP_DIR="${POLYVM_DATA_DIR}/tmp"
   POLYVM_GLOBAL_VERSIONS_FILE="${POLYVM_DATA_DIR}/versions"
-  POLYVM_PLUGIN_INDEX_DIR="${POLYVM_DATA_DIR}/plugin-index"
+  # Overridable, so an air-gapped or mirrored setup can point at its own clone
+  # of the plugin index instead of reaching GitHub.
+  if [ -z "${POLYVM_PLUGIN_INDEX_DIR:-}" ]; then
+    POLYVM_PLUGIN_INDEX_DIR="${POLYVM_DATA_DIR}/plugin-index"
+  fi
   POLYVM_COMPAT_DIR="${POLYVM_DATA_DIR}/compat"
   if [ -z "${POLYVM_BUILTIN_PLUGIN_DIR:-}" ]; then
     POLYVM_BUILTIN_PLUGIN_DIR="${POLYVM_DIR}/contrib/plugins"

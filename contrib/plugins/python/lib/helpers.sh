@@ -179,69 +179,9 @@ sha256_of() {
 
 # --------------------------------------------------------- build environment
 
-# Missing headers are the single most common reason a Python build fails, and
-# the linker error it produces says nothing useful. Check first and name the
-# exact command that fixes it.
-check_build_deps() {
-  local os missing=""
-  os="$(plugin_os)"
-
-  has make || missing="$missing make"
-  has cc || has gcc || has clang || missing="$missing a C compiler"
-
-  case "$os" in
-    darwin)
-      if ! xcode-select -p >/dev/null 2>&1; then
-        die "the Xcode command line tools are required to build Python.
-  Install them with:
-    xcode-select --install"
-      fi
-      if [ -n "$missing" ]; then
-        die "missing build tools:$missing
-  Install the Xcode command line tools with:
-    xcode-select --install"
-      fi
-      if ! has brew; then
-        warn "Homebrew was not found. Python will build, but modules that need
-         openssl, readline, sqlite, xz or tk may be skipped. Installing them helps:
-           brew install openssl@3 readline sqlite3 xz zlib tcl-tk"
-      fi
-      ;;
-    linux)
-      local header
-      for header in zlib.h openssl/ssl.h bzlib.h ffi.h sqlite3.h; do
-        if ! find_header "$header"; then
-          missing="$missing $header"
-        fi
-      done
-      if [ -n "$missing" ]; then
-        warn "these build dependencies look missing:$missing
-         Python may build without some standard library modules. Install them with:
-           Debian/Ubuntu: sudo apt-get install -y build-essential zlib1g-dev libssl-dev \\
-                            libbz2-dev libffi-dev libsqlite3-dev libreadline-dev \\
-                            liblzma-dev libncursesw5-dev tk-dev uuid-dev
-           Fedora/RHEL:   sudo dnf install -y gcc make zlib-devel openssl-devel bzip2-devel \\
-                            libffi-devel sqlite-devel readline-devel xz-devel \\
-                            ncurses-devel tk-devel libuuid-devel
-           Alpine:        sudo apk add build-base zlib-dev openssl-dev bzip2-dev libffi-dev \\
-                            sqlite-dev readline-dev xz-dev ncurses-dev tk-dev util-linux-dev"
-      fi
-      ;;
-    windows)
-      die "building Python from source is not supported on Windows yet.
-  See docs/windows.md for where the port stands."
-      ;;
-  esac
-}
-
-find_header() {
-  local header="$1" dir
-  for dir in /usr/include /usr/local/include /usr/include/x86_64-linux-gnu \
-             /usr/include/aarch64-linux-gnu; do
-    [ -f "${dir}/${header}" ] && return 0
-  done
-  return 1
-}
+# Prerequisite detection lives in lib/deps.sh, which probes by compiling
+# rather than guessing at include paths, and is run from bin/preflight before
+# anything is downloaded.
 
 # On macOS, point the build at Homebrew's libraries when they are installed.
 # Without this, a Python built on a Mac often ends up with no ssl or readline.

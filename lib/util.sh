@@ -193,6 +193,56 @@ polyvm_safe_rm_rf() {
   rm -rf "$target"
 }
 
+# Terminal width, without tput, which is missing on minimal images.
+polyvm_term_width() {
+  local cols="${COLUMNS:-}"
+  if [ -z "$cols" ] && [ -t 1 ]; then
+    cols="$(stty size 2>/dev/null | awk '{print $2}')"
+  fi
+  case "$cols" in
+    ''|*[!0-9]*) cols=80 ;;
+  esac
+  [ "$cols" -lt 40 ] && cols=40
+  printf '%s\n' "$cols"
+}
+
+# Lay stdin out in columns, down then across, like ls.
+#
+# Only ever called when stdout is a terminal. Piped output stays one item per
+# line so `polyvm list-all python | grep 3.13` keeps working.
+polyvm_columnate() {
+  local width
+  width="$(polyvm_term_width)"
+  awk -v total="$width" '
+    { items[n++] = $0; if (length($0) > w) w = length($0) }
+    END {
+      if (n == 0) exit
+      w += 2
+      cols = int(total / w)
+      if (cols < 1) cols = 1
+      rows = int((n + cols - 1) / cols)
+      for (r = 0; r < rows; r++) {
+        line = ""
+        for (c = 0; c < cols; c++) {
+          i = c * rows + r
+          if (i < n) line = line sprintf("%-*s", w, items[i])
+        }
+        sub(/[ ]+$/, "", line)
+        print line
+      }
+    }
+  '
+}
+
+# Print a list, in columns when a human is reading it.
+polyvm_print_list() {
+  if [ -t 1 ]; then
+    polyvm_columnate
+  else
+    cat
+  fi
+}
+
 # Confirm prompt. Returns 0 on yes. Auto-yes when POLYVM_YES is set or
 # stdin is not a terminal (non-interactive install scripts).
 polyvm_confirm() {

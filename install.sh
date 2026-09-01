@@ -48,9 +48,15 @@ case "$(uname -s)" in
   *) die "polyvm supports Linux and macOS. Found: $(uname -s)" ;;
 esac
 
-for tool in git curl tar; do
+for tool in git tar; do
   has "$tool" || die "$tool is required but not installed"
 done
+
+# polyvm downloads with curl or wget, whichever is present, so requiring curl
+# specifically would refuse to install on a minimal image that ships only wget.
+if ! has curl && ! has wget; then
+  die "either curl or wget is required, and neither is installed"
+fi
 
 if [ -z "${BASH_VERSION:-}" ]; then
   die "run this installer with bash: bash install.sh"

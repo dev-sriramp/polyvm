@@ -16,6 +16,7 @@ other language.
 
 | pyenv | polyvm |
 |---|---|
+| (no equivalent) | `polyvm doctor python` |
 | `pyenv install --list` | `polyvm list-all python` |
 | `pyenv install 3.13.1` | `polyvm install python 3.13.1` |
 | `pyenv versions` | `polyvm list python` |
@@ -51,10 +52,28 @@ to retry does not download again.
 
 ## Build dependencies
 
-Python needs a compiler and a set of development headers. Without them Python
-still builds but silently drops standard library modules, and you find out
-later when `import ssl` fails. polyvm checks first and prints the exact command
-for your platform.
+Python needs a compiler and a set of development headers. Get this wrong and
+you hit one of two bad outcomes: the build dies at `configure: error: no
+acceptable C compiler found`, or, worse, it succeeds and hands you a Python
+with no `ssl`, so `pip` fails weeks later with an error that says nothing about
+the real cause.
+
+polyvm checks before it downloads anything:
+
+```sh
+polyvm doctor python
+```
+
+The same check runs automatically at the start of every install. It probes by
+actually compiling a program against each header rather than guessing at
+include paths, because those differ across Debian multiarch, musl, macOS SDKs
+and Homebrew prefixes. It then prints one command to copy for the package
+manager you actually have.
+
+A missing compiler or a missing `zlib`, `openssl` or `libffi` header stops the
+install before a single byte is downloaded. Missing optional headers only warn,
+and name the module you will lose. Override with `POLYVM_SKIP_PREFLIGHT=1` if
+you know better.
 
 **macOS**
 

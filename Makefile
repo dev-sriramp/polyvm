@@ -5,6 +5,7 @@ SOURCES := bin/polyvm lib/core.sh lib/util.sh lib/version.sh lib/plugin.sh \
            lib/update.sh uninstall.sh test/run.sh test/sandbox.sh \
            test/docker.sh scripts/release.sh completions/polyvm.bash \
            contrib/plugins/python/lib/helpers.sh \
+           contrib/plugins/python/lib/deps.sh \
            $(wildcard contrib/plugins/python/bin/*)
 
 .PHONY: help test lint syntax check sandbox sandbox-clean docker release install uninstall print-sources

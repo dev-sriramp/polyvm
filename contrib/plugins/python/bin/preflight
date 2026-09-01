@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Check that Python can actually be built here, before anything is downloaded.
+# polyvm runs this ahead of bin/download; `polyvm doctor python` runs it alone.
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/deps.sh"
+
+python_preflight

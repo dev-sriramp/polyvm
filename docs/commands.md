@@ -33,11 +33,17 @@ Installed versions. The active one is marked with `*`.
 
 ### `polyvm list-all <plugin> [query]`
 
-Every version the plugin can install, optionally filtered.
+Every version you can install, optionally filtered.
 
 ```sh
-polyvm list-all python 3.13
+polyvm list-all python           # around 1,090 of them, in columns
+polyvm list-all python 3.13      # just the 3.13 line
+polyvm list-all python | grep -c .
 ```
+
+On a terminal the versions are laid out in columns and followed by a count and
+the command to install one. Piped, it is one version per line and nothing else,
+so `polyvm list-all python | grep 3.13` works.
 
 ### `polyvm latest <plugin> [query]`
 
@@ -85,6 +91,20 @@ The install directory for a version.
 The binary a command would actually run.
 
 ## Plugins
+
+### `polyvm plugin available [query]`
+
+Every language you can add: the ones polyvm ships, then the plugin index.
+Already-installed plugins are marked.
+
+```sh
+polyvm plugin available            # all of them
+polyvm plugin available ruby       # just the matches
+polyvm plugin available | wc -l    # piped, one bare name per line
+```
+
+Piped output is one plain name per line with no headings or markers, so it can
+be grepped or fed to `xargs`. The headings and counts go to stderr.
 
 ### `polyvm plugin add <name> [git-url] [git-ref]`
 
@@ -134,10 +154,21 @@ executable, for example `npm install -g typescript`.
 
 ## Maintenance
 
-### `polyvm doctor`
+### `polyvm doctor [plugin]`
 
-Check the installation: required tools, whether the shims are on `PATH`, whether
-the shell integration is loaded.
+With no argument, checks the polyvm installation: required tools, whether the
+shims are on `PATH`, whether the shell integration is loaded.
+
+With a plugin name, asks that plugin whether this machine can build it, without
+downloading anything:
+
+```sh
+polyvm doctor python
+```
+
+For Python that probes for a C compiler and the development headers by actually
+compiling against them, and prints the exact package install command for your
+distribution. The same check runs automatically before any install.
 
 ### `polyvm update`
 
@@ -171,3 +202,5 @@ Print the shell integration snippet, for adding to an rc file by hand.
 | `NO_COLOR` | Disable colored output |
 | `POLYVM_UPDATE_CHECK` | `never` to disable the update notice |
 | `POLYVM_UPDATE_INTERVAL_HOURS` | How often to re-check for a release. Default 24 |
+| `POLYVM_SKIP_PREFLIGHT` | Skip a plugin's prerequisite check and install anyway |
+| `POLYVM_PLUGIN_INDEX_DIR` | Use a local or mirrored clone of the plugin index |

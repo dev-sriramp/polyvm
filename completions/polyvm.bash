@@ -27,10 +27,13 @@ _polyvm() {
   case "${COMP_WORDS[1]}" in
     plugin|plugins)
       if [ "$COMP_CWORD" -eq 2 ]; then
-        COMPREPLY=( $(compgen -W "add list remove update search" -- "$cur") )
+        COMPREPLY=( $(compgen -W "available add list remove update search" -- "$cur") )
       elif [ "$COMP_CWORD" -eq 3 ] && [ "${COMP_WORDS[2]}" != "add" ]; then
         COMPREPLY=( $(compgen -W "$(_polyvm_plugins)" -- "$cur") )
       fi
+      ;;
+    doctor)
+      [ "$COMP_CWORD" -eq 2 ] && COMPREPLY=( $(compgen -W "$(_polyvm_plugins)" -- "$cur") )
       ;;
     install|uninstall|list-all|latest|global|local|shell|current|where|exec|env|reshim)
       if [ "$COMP_CWORD" -eq 2 ]; then
