@@ -11,6 +11,7 @@ jobs:
   verify:
     name: verify and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: The tag and the VERSION file must agree
@@ -32,6 +33,7 @@ jobs:
     name: install from the tag
     needs: verify
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +57,7 @@ jobs:
     name: publish the release
     needs: [verify, smoke]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:

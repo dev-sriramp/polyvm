@@ -58,10 +58,20 @@ fi
 
 # ------------------------------------------------------------ install
 
-# Are we running from inside a polyvm checkout?
-SCRIPT_DIR="$( cd -P "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Are we running from inside a polyvm checkout, or piped from curl?
+#
+# BASH_SOURCE[0] is unset for `curl ... | bash` and for `bash -c "$(curl ...)"`,
+# which is how most people install. Under `set -u` reading it unguarded aborts
+# the script, so the documented one-line install would fail before doing
+# anything. Guard it, and treat "no script on disk" as the piped case.
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=""
+if [ -n "$SCRIPT_SOURCE" ] && [ -f "$SCRIPT_SOURCE" ]; then
+  SCRIPT_DIR="$( cd -P "$( dirname "$SCRIPT_SOURCE" )" && pwd )"
+fi
+
 LOCAL_CHECKOUT=""
-if [ -f "${SCRIPT_DIR}/bin/polyvm" ] && [ -f "${SCRIPT_DIR}/lib/core.sh" ]; then
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/bin/polyvm" ] && [ -f "${SCRIPT_DIR}/lib/core.sh" ]; then
   LOCAL_CHECKOUT="$SCRIPT_DIR"
 fi
 

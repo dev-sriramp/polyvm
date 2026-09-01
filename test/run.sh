@@ -300,6 +300,26 @@ assert_eq "the reported version comes from the VERSION file" \
   "$(tr -d '[:space:]' < "${REPO}/VERSION")" \
   "$("$POLYVM" version | awk '{print $2}')"
 
+printf '\npiped install\n'
+# curl | bash and bash -c "$(curl ...)" both leave BASH_SOURCE unset. Under
+# set -u that aborted install.sh before it did anything, which broke the
+# documented one-line install. A bogus repo makes this offline: the script must
+# reach the clone and fail there, not die reading BASH_SOURCE.
+PIPE_OUT="$(POLYVM_DIR="${WORK}/pipe" POLYVM_REPO=/nonexistent-polyvm-repo POLYVM_NO_RC=1 \
+  bash -c "$(cat "${REPO}/install.sh")" 2>&1 || true)"
+case "$PIPE_OUT" in
+  *"unbound variable"*) fail "install.sh survives being piped to bash" "$PIPE_OUT" ;;
+  *) pass "install.sh survives being piped to bash" ;;
+esac
+assert_contains "the piped install reaches the clone step" "$PIPE_OUT" "cloning polyvm"
+
+PIPE_STDIN="$(POLYVM_DIR="${WORK}/pipe2" POLYVM_REPO=/nonexistent-polyvm-repo POLYVM_NO_RC=1 \
+  bash < "${REPO}/install.sh" 2>&1 || true)"
+case "$PIPE_STDIN" in
+  *"unbound variable"*) fail "install.sh survives curl | bash" "$PIPE_STDIN" ;;
+  *) pass "install.sh survives curl | bash" ;;
+esac
+
 printf '\nguards\n'
 assert_fails "commands on a missing plugin fail cleanly" "$POLYVM" list-all demo
 assert_fails "install on a missing plugin fails cleanly" "$POLYVM" install demo 1.0.0

@@ -13,6 +13,7 @@ jobs:
   lint:
     name: shellcheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: No source file is accidentally gitignored
@@ -48,10 +49,11 @@ jobs:
   test:
     name: test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04, macos-latest, macos-13]
+        os: [ubuntu-latest, ubuntu-22.04, macos-latest, macos-14]
     steps:
       - uses: actions/checkout@v4
       - name: Show the shell we are testing against
@@ -62,6 +64,7 @@ jobs:
   bash32:
     name: stock macOS bash 3.2
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Confirm /bin/bash is 3.2
@@ -72,6 +75,7 @@ jobs:
   distros:
     name: ${{ matrix.image }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     container: ${{ matrix.image }}
     strategy:
       fail-fast: false
@@ -102,6 +106,7 @@ jobs:
   integration:
     name: install a real runtime
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -137,6 +142,7 @@ jobs:
   python:
     name: build python from source
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     # Compiling CPython is slow, so keep it off the pull request path.
     if: github.event_name != 'pull_request'
     strategy:
