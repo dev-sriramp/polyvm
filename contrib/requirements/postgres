@@ -1,0 +1,8 @@
+# PostgreSQL, built from source.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+header|readline/readline.h|yes|configure fails unless readline is disabled|libreadline-dev|readline-devel|readline-dev|readline|readline-devel|readline
+header|zlib.h|yes|configure fails unless zlib is disabled|zlib1g-dev|zlib-devel|zlib-dev|zlib|zlib-devel|zlib
+header|openssl/ssl.h|no|no ssl connections|libssl-dev|openssl-devel|openssl-dev|openssl|libopenssl-devel|openssl@3
+header|uuid/uuid.h|no|no uuid-ossp extension|uuid-dev|libuuid-devel|util-linux-dev|util-linux|libuuid-devel|

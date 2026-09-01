@@ -1,0 +1,6 @@
+# Lua, built from source.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+header|readline/readline.h|no|no history or line editing in the interpreter|libreadline-dev|readline-devel|readline-dev|readline|readline-devel|readline
+header|ncurses.h|no|readline support may not link|libncurses-dev|ncurses-devel|ncurses-dev|ncurses|ncurses-devel|ncurses

@@ -1,0 +1,13 @@
+# PHP, built from source by php-build.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+tool|autoconf|yes|php-build regenerates the configure script|autoconf|autoconf|autoconf|autoconf|autoconf|autoconf
+tool|pkg-config|yes|the build locates its libraries with it|pkg-config|pkgconf-pkg-config|pkgconf|pkgconf|pkg-config|pkg-config
+header|libxml/parser.h|yes|the build fails, libxml2 is not optional|libxml2-dev|libxml2-devel|libxml2-dev|libxml2|libxml2-devel|libxml2
+header|openssl/ssl.h|yes|no https, so composer cannot reach the network|libssl-dev|openssl-devel|openssl-dev|openssl|libopenssl-devel|openssl@3
+header|sqlite3.h|yes|no pdo_sqlite, which the default build expects|libsqlite3-dev|sqlite-devel|sqlite-dev|sqlite|sqlite3-devel|sqlite
+header|zlib.h|yes|no zlib support|zlib1g-dev|zlib-devel|zlib-dev|zlib|zlib-devel|zlib
+header|curl/curl.h|no|no curl extension|libcurl4-openssl-dev|libcurl-devel|curl-dev|curl|libcurl-devel|curl
+header|oniguruma.h|no|no mbstring extension|libonig-dev|oniguruma-devel|oniguruma-dev|oniguruma|oniguruma-devel|oniguruma
+header|readline/readline.h|no|no history or line editing in the interactive shell|libreadline-dev|readline-devel|readline-dev|readline|readline-devel|readline

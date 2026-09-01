@@ -163,14 +163,28 @@ polyvm_install_version() {
     return 0
   fi
 
-  # Preflight before anything is downloaded. A missing compiler is not worth
-  # discovering after a 25 MB download and two minutes of configure.
-  if polyvm_plugin_has_hook "$plugin" preflight \
-     && [ -z "${POLYVM_SKIP_PREFLIGHT:-}" ]; then
+  # Everything that could stop this install happens before the download. A
+  # missing compiler is not worth discovering after 25 MB and two minutes of
+  # configure.
+  #
+  # The plugin's own hook goes first because it is cheap and catches things
+  # only it can know, such as a version that does not exist. The generic
+  # requirements check follows, so a language does not need to write any code
+  # to get prerequisite checking.
+  if [ -z "${POLYVM_SKIP_PREFLIGHT:-}" ]; then
     POLYVM_INSTALL_VERSION="$version"
     ASDF_INSTALL_VERSION="${version#ref:}"
     export POLYVM_INSTALL_VERSION ASDF_INSTALL_VERSION
-    if ! polyvm_run_hook "$plugin" preflight; then
+
+    if polyvm_plugin_has_hook "$plugin" preflight; then
+      if ! polyvm_run_hook "$plugin" preflight; then
+        polyvm_die "${plugin} is not ready to install on this machine.
+  Fix the above, then run: polyvm install ${plugin} ${version}
+  To try anyway: POLYVM_SKIP_PREFLIGHT=1 polyvm install ${plugin} ${version}"
+      fi
+    fi
+
+    if ! polyvm_check_requirements "$plugin"; then
       polyvm_die "${plugin} is not ready to build on this machine.
   Fix the above, then run: polyvm install ${plugin} ${version}
   To try anyway: POLYVM_SKIP_PREFLIGHT=1 polyvm install ${plugin} ${version}"

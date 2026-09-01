@@ -159,16 +159,22 @@ executable, for example `npm install -g typescript`.
 With no argument, checks the polyvm installation: required tools, whether the
 shims are on `PATH`, whether the shell integration is loaded.
 
-With a plugin name, asks that plugin whether this machine can build it, without
+With a plugin name, asks whether this machine can build that language, without
 downloading anything:
 
 ```sh
 polyvm doctor python
+polyvm doctor ruby
+polyvm doctor erlang
 ```
 
-For Python that probes for a C compiler and the development headers by actually
-compiling against them, and prints the exact package install command for your
-distribution. The same check runs automatically before any install.
+It probes for the compiler and each development header by compiling against
+them, then prints the exact package install command for your distribution, and
+offers to run it. The same check runs automatically before any install.
+
+polyvm knows the prerequisites for python, ruby, erlang, php, perl, lua,
+postgres, rust and nodejs. Adding another is a file, not code: see
+[plugin-api.md](plugin-api.md).
 
 ### `polyvm update`
 
@@ -205,3 +211,4 @@ Print the shell integration snippet, for adding to an rc file by hand.
 | `POLYVM_SKIP_PREFLIGHT` | Skip a plugin's prerequisite check and install anyway |
 | `POLYVM_INSTALL_DEPS` | `yes` to install missing build dependencies without asking, `no` to never install them. Default is to ask when a terminal is present |
 | `POLYVM_PLUGIN_INDEX_DIR` | Use a local or mirrored clone of the plugin index |
+| `POLYVM_REQUIREMENTS_DIR` | Use your own set of build-requirement files |

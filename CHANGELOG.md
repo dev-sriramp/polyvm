@@ -8,6 +8,14 @@ Notable changes to polyvm. The format follows
 
 ### Added
 
+- **Build prerequisites are checked for every language, not just Python.** The
+  machinery moved out of the Python plugin into polyvm itself, driven by
+  `contrib/requirements/<language>` files. Ruby, Erlang, PHP, Perl, Lua,
+  PostgreSQL, Rust and Node.js are covered out of the box, and adding another
+  is a file rather than code. A plugin does not have to implement anything to
+  get prerequisite checking.
+- `polyvm doctor <language>` works for any of them.
+- `POLYVM_REQUIREMENTS_DIR` to point at your own set of requirement files.
 - **polyvm offers to install missing build dependencies instead of only
   reporting them.** When a language cannot be built, the prerequisite check now
   prints the exact command and asks whether to run it. Say yes and it installs,

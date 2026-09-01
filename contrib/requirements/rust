@@ -1,0 +1,4 @@
+# Rust, installed as prebuilt toolchains by rustup. It compiles nothing here,
+# but the toolchain needs a system linker to produce binaries at all.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|rustc links through the system C compiler, so nothing will build|build-essential|gcc|build-base|base-devel|gcc|

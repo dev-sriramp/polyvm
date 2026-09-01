@@ -34,6 +34,8 @@ polyvm_init_colors
 . "${POLYVM_LIB}/util.sh"
 # shellcheck source=lib/version.sh
 . "${POLYVM_LIB}/version.sh"
+# shellcheck source=lib/deps.sh
+. "${POLYVM_LIB}/deps.sh"
 # shellcheck source=lib/compat.sh
 . "${POLYVM_LIB}/compat.sh"
 # shellcheck source=lib/plugin.sh
@@ -83,7 +85,7 @@ RUNNING
   reshim [plugin] [version]        rebuild the shims
 
 MAINTENANCE
-  doctor [plugin]                  check the install, or a language's prerequisites
+  doctor [plugin]                  check the install, or a language's build prerequisites
   update                           update polyvm itself
   init <bash|zsh>                  print the shell integration snippet
   version                          print the polyvm version
@@ -229,15 +231,23 @@ cmd_doctor() {
   # downloading anything.
   if [ -n "$plugin" ]; then
     polyvm_require_plugin "$plugin"
-    if ! polyvm_plugin_has_hook "$plugin" preflight; then
-      polyvm_info "the ${plugin} plugin does not publish a prerequisite check"
+    local checked=""
+    if polyvm_plugin_has_hook "$plugin" preflight; then
+      checked=yes
+      polyvm_run_hook "$plugin" preflight || return 1
+    fi
+    if polyvm_has_requirements "$plugin"; then
+      checked=yes
+      polyvm_check_requirements "$plugin" || return 1
+    fi
+    if [ -z "$checked" ]; then
+      polyvm_info "polyvm does not know what ${plugin} needs to build."
+      polyvm_info "Languages it does know: $(polyvm_requirements_list | tr '\n' ' ')"
+      polyvm_info "Adding one is a file in contrib/requirements, see docs/plugin-api.md"
       return 0
     fi
-    if polyvm_run_hook "$plugin" preflight; then
-      polyvm_ok "${plugin} can be installed on this machine"
-      return 0
-    fi
-    return 1
+    polyvm_ok "${plugin} can be installed on this machine"
+    return 0
   fi
 
   local problems=0

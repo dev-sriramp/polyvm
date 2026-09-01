@@ -1,0 +1,5 @@
+# Node.js, installed as prebuilt binaries. Little is needed, and nothing is
+# compiled unless you ask for a source build.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|tar|yes|the release archive cannot be unpacked|tar|tar|tar|tar|tar|
+tool|gpg|no|release signatures cannot be verified, so the check is skipped|gnupg|gnupg2|gnupg|gnupg|gpg2|gnupg

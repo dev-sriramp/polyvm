@@ -1,0 +1,15 @@
+# Python, built from source by python-build.
+# Matches the pyenv suggested build environment.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+header|zlib.h|yes|the build fails outright|zlib1g-dev|zlib-devel|zlib-dev|zlib|zlib-devel|zlib
+header|openssl/ssl.h|yes|no ssl module, so pip cannot reach the network|libssl-dev|openssl-devel|openssl-dev|openssl|libopenssl-devel|openssl@3
+header|ffi.h|yes|no ctypes module|libffi-dev|libffi-devel|libffi-dev|libffi|libffi-devel|libffi
+header|bzlib.h|no|no bz2 module|libbz2-dev|bzip2-devel|bzip2-dev|bzip2|libbz2-devel|bzip2
+header|sqlite3.h|no|no sqlite3 module|libsqlite3-dev|sqlite-devel|sqlite-dev|sqlite|sqlite3-devel|sqlite
+header|readline/readline.h|no|no history or line editing in the REPL|libreadline-dev|readline-devel|readline-dev|readline|readline-devel|readline
+header|lzma.h|no|no lzma module|liblzma-dev|xz-devel|xz-dev|xz|xz-devel|xz
+header|ncurses.h|no|no curses module|libncursesw5-dev|ncurses-devel|ncurses-dev|ncurses|ncurses-devel|ncurses
+header|uuid/uuid.h|no|no uuid module|uuid-dev|libuuid-devel|util-linux-dev|util-linux|libuuid-devel|
+header|tk.h|no|no tkinter, so IDLE and turtle will not run|tk-dev|tk-devel|tk-dev|tk|tk-devel|tcl-tk

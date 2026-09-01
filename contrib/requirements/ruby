@@ -1,0 +1,11 @@
+# Ruby, built from source by ruby-build.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+header|openssl/ssl.h|yes|no https, so gem install and net/http fail|libssl-dev|openssl-devel|openssl-dev|openssl|libopenssl-devel|openssl@3
+header|zlib.h|yes|the build fails outright|zlib1g-dev|zlib-devel|zlib-dev|zlib|zlib-devel|zlib
+header|yaml.h|yes|no psych, so YAML and bundler fail|libyaml-dev|libyaml-devel|yaml-dev|libyaml|libyaml-devel|libyaml
+header|ffi.h|no|no fiddle, which some native gems need|libffi-dev|libffi-devel|libffi-dev|libffi|libffi-devel|libffi
+header|readline/readline.h|no|no history or line editing in irb|libreadline-dev|readline-devel|readline-dev|readline|readline-devel|readline
+header|gdbm.h|no|no gdbm module|libgdbm-dev|gdbm-devel|gdbm-dev|gdbm|gdbm-devel|gdbm
+header|ncurses.h|no|no curses module|libncurses-dev|ncurses-devel|ncurses-dev|ncurses|ncurses-devel|ncurses

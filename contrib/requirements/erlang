@@ -1,0 +1,8 @@
+# Erlang/OTP, built from source by kerl.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+tool|autoconf|yes|the OTP build regenerates its configure scripts|autoconf|autoconf|autoconf|autoconf|autoconf|autoconf
+header|ncurses.h|yes|the build fails, and there is no shell|libncurses-dev|ncurses-devel|ncurses-dev|ncurses|ncurses-devel|ncurses
+header|openssl/ssl.h|yes|no crypto, ssl or public_key applications|libssl-dev|openssl-devel|openssl-dev|openssl|libopenssl-devel|openssl@3
+header|zlib.h|no|no zlib support in the runtime|zlib1g-dev|zlib-devel|zlib-dev|zlib|zlib-devel|zlib

@@ -1,5 +1,5 @@
-polyvm now offers to install what a build needs, instead of handing you an
-error and walking away.
+polyvm now checks what a build needs before downloading anything, offers to
+install it, and does this for every language rather than one.
 
 ## Install
 
@@ -56,6 +56,37 @@ error: there is no Python 3.17.
   Newest stable:   polyvm install python latest
 ```
 
+## Every language, not just Python
+
+The prerequisite machinery lives in polyvm itself now, driven by a file per
+language in `contrib/requirements/`. Ruby, Erlang, PHP, Perl, Lua, PostgreSQL,
+Rust and Node.js are covered out of the box:
+
+```sh
+polyvm doctor ruby
+polyvm doctor erlang
+```
+
+```
+erlang cannot be built here. Missing:
+
+    libncurses-dev
+        the build fails, and there is no shell
+    libssl-dev
+        no crypto, ssl or public_key applications
+
+  polyvm can install them with:
+
+    sudo apt-get update && sudo apt-get install -y libncurses-dev libssl-dev
+
+  Install them now? [Y/n]
+```
+
+A plugin does not have to implement anything to get this. Covering another
+language is a ten-field line per requirement in a text file, documented in
+[docs/plugin-api.md](https://github.com/dev-sriramp/polyvm/blob/main/docs/plugin-api.md).
+Point `POLYVM_REQUIREMENTS_DIR` at your own directory to override the lot.
+
 ## Control
 
 | `POLYVM_INSTALL_DEPS` | Effect |
@@ -81,7 +112,7 @@ hanging on input nobody will type is worse than a clear failure.
 
 ## Tested
 
-106 assertions on every push across Ubuntu, Debian, Fedora, Alpine and macOS,
+113 assertions on every push across Ubuntu, Debian, Fedora, Alpine and macOS,
 including under stock macOS bash 3.2 and busybox coreutils. The dependency
 install path is tested against a stubbed package manager, so the tests never
 touch a real system.

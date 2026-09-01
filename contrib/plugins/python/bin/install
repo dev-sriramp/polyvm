@@ -2,7 +2,6 @@
 # Compile and install a Python version, the way pyenv does.
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/deps.sh"
 
 version="${ASDF_INSTALL_VERSION:?ASDF_INSTALL_VERSION is not set}"
 install_path="${ASDF_INSTALL_PATH:?ASDF_INSTALL_PATH is not set}"
@@ -17,15 +16,8 @@ if [ "$install_type" = "ref" ]; then
     polyvm install python 3.14-dev"
 fi
 
-# The prerequisite check runs in bin/preflight, which polyvm calls before the
-# download. Repeat it here for a direct hook invocation, and so that
-# POLYVM_SKIP_PREFLIGHT still gets a warning rather than silence.
-if [ -n "${POLYVM_SKIP_PREFLIGHT:-}" ]; then
-  warn "skipping the prerequisite check because POLYVM_SKIP_PREFLIGHT is set"
-else
-  python_preflight || die "the build prerequisites are not satisfied. See above."
-fi
-
+# polyvm checks the build prerequisites before calling this hook. Nothing to
+# repeat here beyond pointing the build at Homebrew on macOS.
 setup_darwin_build_env
 
 ensure_definition "$version" || die "no build recipe for Python ${version}.

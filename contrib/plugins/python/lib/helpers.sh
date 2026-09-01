@@ -179,9 +179,36 @@ sha256_of() {
 
 # --------------------------------------------------------- build environment
 
-# Prerequisite detection lives in lib/deps.sh, which probes by compiling
-# rather than guessing at include paths, and is run from bin/preflight before
-# anything is downloaded.
+# Build prerequisites are not this plugin's job any more. polyvm checks them
+# for every language from contrib/requirements/python, so the same machinery
+# serves Ruby, Erlang, PHP and the rest.
+#
+# What is left here is the one check only this plugin can make: whether the
+# requested version is a thing that exists.
+
+# Catch a version that does not exist before anyone installs a toolchain for it.
+check_version_exists() {
+  local version="$1"
+  ensure_python_build
+  definition_exists "$version" && return 0
+
+  update_python_build >/dev/null 2>&1 || true
+  definition_exists "$version" && return 0
+
+  printf '\n' >&2
+  printf 'error: there is no Python %s.\n\n' "$version" >&2
+
+  local near
+  near="$(list_definitions | grep -E "^${version}" | tail -n8 || true)"
+  if [ -n "$near" ]; then
+    printf '  Did you mean one of these?\n\n' >&2
+    printf '%s\n' "$near" | sed 's/^/    /' >&2
+    printf '\n' >&2
+  fi
+  printf '  See everything:  polyvm list-all python\n' >&2
+  printf '  Newest stable:   polyvm install python latest\n' >&2
+  return 1
+}
 
 # On macOS, point the build at Homebrew's libraries when they are installed.
 # Without this, a Python built on a Mac often ends up with no ssl or readline.

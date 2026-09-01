@@ -1,0 +1,5 @@
+# Perl, built from source.
+# kind|spec|required|why|apt|dnf|apk|pacman|zypper|brew
+tool|cc|yes|a C compiler, without which nothing can be compiled|build-essential|gcc|build-base|base-devel|gcc|
+tool|make|yes|make, which drives the build|build-essential|make|build-base|base-devel|make|
+header|zlib.h|no|Compress::Raw::Zlib falls back to a bundled copy|zlib1g-dev|zlib-devel|zlib-dev|zlib|zlib-devel|zlib

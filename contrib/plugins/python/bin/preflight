@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Check that Python can actually be built here, before anything is downloaded.
-# polyvm runs this ahead of bin/download; `polyvm doctor python` runs it alone.
+# Refuse early when the requested version does not exist, so nobody installs a
+# toolchain for a Python that was never released.
+#
+# The build prerequisites are checked by polyvm itself, from
+# contrib/requirements/python, for every language rather than only this one.
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/helpers.sh"
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/deps.sh"
 
-python_preflight
+[ -n "${ASDF_INSTALL_VERSION:-}" ] || exit 0
+[ "${ASDF_INSTALL_TYPE:-version}" = "version" ] || exit 0
+
+check_version_exists "$ASDF_INSTALL_VERSION"
